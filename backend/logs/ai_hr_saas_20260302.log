@@ -1,0 +1,51 @@
+2026-03-02 11:49:21,184 - ai_hr_saas - INFO - Starting AI HR SaaS backend on port 8000
+2026-03-02 11:51:11,779 - ai_hr_saas - INFO - User logged in: thakursushant792@gmail.com
+2026-03-02 11:51:29,276 - ai_hr_saas - INFO - Loading embedding model: all-MiniLM-L6-v2
+2026-03-02 11:51:35,231 - ai_hr_saas - INFO - Rebuilding FAISS index for user 2...
+2026-03-02 11:52:06,398 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 11:52:27,577 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 11:52:42,733 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 11:52:57,404 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 11:53:40,067 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 11:55:49,750 - ai_hr_saas - INFO - Search completed: 1 results
+2026-03-02 12:46:19,388 - ai_hr_saas - INFO - Starting AI HR SaaS backend on port 8000
+2026-03-02 12:47:51,525 - ai_hr_saas - INFO - User logged in: thakursushant792@gmail.com
+2026-03-02 12:48:39,251 - ai_hr_saas - INFO - Loading embedding model: all-MiniLM-L6-v2
+2026-03-02 12:48:46,514 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 12:49:01,185 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 12:49:21,438 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 13:02:32,000 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 13:03:46,766 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 13:04:07,582 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 13:04:30,319 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 13:04:54,027 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 13:05:05,371 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 13:05:17,245 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 13:05:35,477 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 13:05:54,010 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 13:06:14,189 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 13:06:24,380 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-02 15:37:24,146 - ai_hr_saas - INFO - Starting AI HR SaaS backend on port 8000
+2026-03-02 15:38:22,305 - ai_hr_saas - INFO - User logged in: thakursushant792@gmail.com
+2026-03-02 15:58:07,241 - ai_hr_saas - INFO - User logged in: thakursushant792@gmail.com
+2026-03-02 16:06:53,524 - ai_hr_saas - INFO - User logged in: thakursushant792@gmail.com
+2026-03-02 16:53:02,409 - ai_hr_saas - INFO - User logged in: thakursushant792@gmail.com
+2026-03-02 17:27:25,329 - ai_hr_saas - INFO - User logged in: thakursushant792@gmail.com
+2026-03-02 17:28:04,256 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-02 17:28:26,102 - ai_hr_saas - DEBUG - Cache SET: ollama_-8258100733828026226
+2026-03-02 17:28:26,317 - ai_hr_saas - ERROR - Error creating InterviewQuestionsResponse: 2 validation errors for InterviewQuestionsResponse
+practical_tasks.0
+  Input should be a valid string [type=string_type, input_value={'task': 'Write a simple ...': 10, 'time_limit': 30}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+practical_tasks.1
+  Input should be a valid string [type=string_type, input_value={'task': 'Implement a bas...': 12, 'time_limit': 45}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+2026-03-02 17:28:26,319 - ai_hr_saas - ERROR - json_data was: {'technical_questions': [{'question': 'What is the difference between a static and dynamic proxy in Java? Provide an example of when you would use each.', 'evaluation_points': 5}, {'question': 'Explain the concept of immutable data structures. How do they impact performance in multithreaded applications?', 'evaluation_points': 4}, {'question': 'What is the purpose of the builder design pattern? Can you provide an example implementation in Java?', 'evaluation_points': 5}], 'behavioral_questions': [{'question': 'Can you describe a project where you had to work with a team on a deadline? How did you handle conflicts or disagreements?', 'evaluation_points': 3}, {'question': 'How do you approach debugging complex issues in your code? Can you walk me through your thought process?', 'evaluation_points': 4}, {'question': 'Describe a situation where you had to learn a new technology or framework quickly. How did you go about it?', 'evaluation_points': 3}], 'practical_tasks': [{'task': 'Write a simple REST API using Spring Boot that exposes an endpoint to calculate the area of a rectangle given its length and width.', 'evaluation_points': 10, 'time_limit': 30}, {'task': 'Implement a basic caching mechanism in your existing banking management system project. Discuss your design choices and trade-offs.', 'evaluation_points': 12, 'time_limit': 45}]}
+2026-03-02 17:29:00,479 - ai_hr_saas - INFO - Loading embedding model: all-MiniLM-L6-v2
+2026-03-02 17:29:09,439 - ai_hr_saas - INFO - Rebuilding FAISS index for user 2...
+2026-03-02 17:29:47,443 - ai_hr_saas - INFO - Search completed: 1 results
+2026-03-02 17:30:21,106 - ai_hr_saas - INFO - Search completed: 1 results
+2026-03-02 17:30:40,692 - ai_hr_saas - INFO - Search completed: 1 results
+2026-03-02 17:30:56,767 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-02 17:31:05,915 - ai_hr_saas - DEBUG - Cache SET: ollama_2679300336921334604
+2026-03-02 17:31:05,963 - ai_hr_saas - INFO - Match analysis created for resume 12

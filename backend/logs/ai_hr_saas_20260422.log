@@ -1,0 +1,10 @@
+2026-04-22 19:25:14,874 - ai_hr_saas - INFO - Starting AI HR SaaS backend on port 8000
+2026-04-22 20:23:42,610 - ai_hr_saas - ERROR - Registration error: 2 validation errors for UserResponse
+first_name
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+last_name
+  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+2026-04-22 21:35:46,682 - ai_hr_saas - INFO - Starting AI HR SaaS backend on port 8000
+2026-04-22 21:37:52,556 - ai_hr_saas - INFO - New user registered: test@company.com

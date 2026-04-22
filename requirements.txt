@@ -1,0 +1,39 @@
+# ==================== BACKEND DEPENDENCIES ====================
+# Core framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.23
+
+# Authentication & Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.1
+pydantic[email]==2.5.0
+
+# PDF Processing
+pdfplumber==0.10.3
+
+# Vector Database & Embeddings
+faiss-cpu==1.13.2
+sentence-transformers==2.2.2
+numpy>=1.26.0
+
+# HTTP Requests
+requests==2.31.0
+
+# Streamlit Frontend
+streamlit==1.28.1
+pandas==2.1.3
+
+# Utilities
+python-dotenv==1.0.0
+python-dateutil==2.8.2
+
+# Development
+pytest==7.4.3
+black==23.12.0
+flake8==6.1.0
+mypy==1.7.1

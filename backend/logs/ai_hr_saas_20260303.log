@@ -1,0 +1,137 @@
+2026-03-03 09:35:34,518 - ai_hr_saas - INFO - Starting AI HR SaaS backend on port 8000
+2026-03-03 09:37:58,285 - ai_hr_saas - INFO - User logged in: thakursushant792@gmail.com
+2026-03-03 09:38:34,232 - ai_hr_saas - INFO - Loading embedding model: all-MiniLM-L6-v2
+2026-03-03 09:38:41,196 - ai_hr_saas - INFO - Rebuilding FAISS index for user 2...
+2026-03-03 09:52:16,995 - ai_hr_saas - INFO - Resume uploaded: Java_Developer_Fake_Resume.pdf (ID: 10)
+2026-03-03 09:53:10,866 - ai_hr_saas - INFO - Search completed: 1 results
+2026-03-03 09:53:50,888 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-03 09:54:02,443 - ai_hr_saas - DEBUG - Cache SET: ollama_-2411730311666116017
+2026-03-03 09:54:02,473 - ai_hr_saas - INFO - Match analysis created for resume 10
+2026-03-03 09:54:33,062 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-03 09:54:41,419 - ai_hr_saas - DEBUG - Cache SET: ollama_2301976709166636052
+2026-03-03 09:54:41,451 - ai_hr_saas - INFO - Interview questions generated for resume 10
+2026-03-03 09:55:32,385 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-03 09:55:38,290 - ai_hr_saas - DEBUG - Cache SET: ollama_6495554693117941175
+2026-03-03 09:55:38,321 - ai_hr_saas - INFO - Email generated for resume 10
+2026-03-03 09:56:31,124 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-03 09:56:36,811 - ai_hr_saas - DEBUG - Cache SET: ollama_-5701229835552857303
+2026-03-03 09:56:36,835 - ai_hr_saas - INFO - Email generated for resume 10
+2026-03-03 09:59:20,257 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-03 09:59:25,525 - ai_hr_saas - DEBUG - Cache SET: ollama_-477852551207235987
+2026-03-03 09:59:25,548 - ai_hr_saas - INFO - Job description generated: senior backend engineer
+2026-03-03 10:01:21,578 - ai_hr_saas - INFO - Resume uploaded: SUSHANT-RESUME.pdf (ID: 11)
+2026-03-03 10:01:30,023 - ai_hr_saas - INFO - Rebuilding FAISS index for user 2...
+2026-03-03 10:01:36,384 - ai_hr_saas - INFO - Resume uploaded: Sneha resume (1).pdf (ID: 12)
+2026-03-03 10:02:08,489 - ai_hr_saas - INFO - Search completed: 2 results
+2026-03-03 10:02:30,861 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-03 10:02:36,498 - ai_hr_saas - DEBUG - Cache SET: ollama_-3810605718325776848
+2026-03-03 10:02:36,519 - ai_hr_saas - INFO - Match analysis created for resume 12
+2026-03-03 10:03:00,941 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-03 10:03:12,247 - ai_hr_saas - DEBUG - Cache SET: ollama_3911291449426861388
+2026-03-03 10:03:12,263 - ai_hr_saas - ERROR - Error creating InterviewQuestionsResponse: 2 validation errors for InterviewQuestionsResponse
+practical_tasks.0
+  Input should be a valid string [type=string_type, input_value={'task': "You're tasked w... Organizational Skills'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+practical_tasks.1
+  Input should be a valid string [type=string_type, input_value={'task': 'A new employee ...oarding, Communication'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+2026-03-03 10:03:12,264 - ai_hr_saas - ERROR - json_data was: {'technical_questions': [{'question': "What is the difference between an employee's service record and a leave sanction slip in HRIS? Explain with a simple example.", 'marks': 3, 'difficulty': 'Easy', 'focus': 'HRIS, Employee Records'}, {'question': 'How would you ensure equal opportunities for candidates from diverse backgrounds during the recruitment process? Please provide two concrete steps.', 'marks': 4, 'difficulty': 'Medium', 'focus': 'Recruitment, Diversity'}, {'question': 'What is the purpose of a Performance Management System in HR? Describe its key features and benefits for an organization.', 'marks': 5, 'difficulty': 'Medium-Hard', 'focus': 'Performance Management, HR Systems'}], 'behavioral_questions': [{'question': 'Tell me about a time when you had to handle a difficult situation in your previous internship. How did you resolve it and what did you learn from the experience?', 'marks': 5, 'difficulty': 'Medium', 'focus': 'Communication, Problem-Solving'}, {'question': "Describe your approach to building rapport with colleagues or clients in a new workplace. Can you give an example of how you've applied this approach in the past?", 'marks': 5, 'difficulty': 'Medium', 'focus': 'Interpersonal Skills, Adaptability'}, {'question': 'How do you prioritize tasks and manage your time when working on multiple projects simultaneously? Can you walk me through your process?', 'marks': 4, 'difficulty': 'Easy-Medium', 'focus': 'Time Management, Productivity'}], 'practical_tasks': [{'task': "You're tasked with organizing a company-wide event for employees. Plan the event's theme, date, and activities within a tight 2-week deadline.", 'marks': 10, 'difficulty': 'Medium', 'focus': 'Event Planning, Organizational Skills'}, {'task': 'A new employee is joining our team, but their start date has been delayed. Prepare a welcome pack and email for the new employee to ensure a smooth onboarding process.', 'marks': 8, 'difficulty': 'Easy-Medium', 'focus': 'Onboarding, Communication'}]}
+2026-03-03 10:03:26,983 - ai_hr_saas - DEBUG - Cache HIT: ollama_3911291449426861388
+2026-03-03 10:03:27,008 - ai_hr_saas - ERROR - Error creating InterviewQuestionsResponse: 2 validation errors for InterviewQuestionsResponse
+practical_tasks.0
+  Input should be a valid string [type=string_type, input_value={'task': "You're tasked w... Organizational Skills'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+practical_tasks.1
+  Input should be a valid string [type=string_type, input_value={'task': 'A new employee ...oarding, Communication'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+2026-03-03 10:03:27,009 - ai_hr_saas - ERROR - json_data was: {'technical_questions': [{'question': "What is the difference between an employee's service record and a leave sanction slip in HRIS? Explain with a simple example.", 'marks': 3, 'difficulty': 'Easy', 'focus': 'HRIS, Employee Records'}, {'question': 'How would you ensure equal opportunities for candidates from diverse backgrounds during the recruitment process? Please provide two concrete steps.', 'marks': 4, 'difficulty': 'Medium', 'focus': 'Recruitment, Diversity'}, {'question': 'What is the purpose of a Performance Management System in HR? Describe its key features and benefits for an organization.', 'marks': 5, 'difficulty': 'Medium-Hard', 'focus': 'Performance Management, HR Systems'}], 'behavioral_questions': [{'question': 'Tell me about a time when you had to handle a difficult situation in your previous internship. How did you resolve it and what did you learn from the experience?', 'marks': 5, 'difficulty': 'Medium', 'focus': 'Communication, Problem-Solving'}, {'question': "Describe your approach to building rapport with colleagues or clients in a new workplace. Can you give an example of how you've applied this approach in the past?", 'marks': 5, 'difficulty': 'Medium', 'focus': 'Interpersonal Skills, Adaptability'}, {'question': 'How do you prioritize tasks and manage your time when working on multiple projects simultaneously? Can you walk me through your process?', 'marks': 4, 'difficulty': 'Easy-Medium', 'focus': 'Time Management, Productivity'}], 'practical_tasks': [{'task': "You're tasked with organizing a company-wide event for employees. Plan the event's theme, date, and activities within a tight 2-week deadline.", 'marks': 10, 'difficulty': 'Medium', 'focus': 'Event Planning, Organizational Skills'}, {'task': 'A new employee is joining our team, but their start date has been delayed. Prepare a welcome pack and email for the new employee to ensure a smooth onboarding process.', 'marks': 8, 'difficulty': 'Easy-Medium', 'focus': 'Onboarding, Communication'}]}
+2026-03-03 10:04:21,068 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-03 10:04:26,611 - ai_hr_saas - DEBUG - Cache SET: ollama_-6937694526177006045
+2026-03-03 10:04:26,636 - ai_hr_saas - INFO - Email generated for resume 12
+2026-03-03 10:05:11,539 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-03 10:05:22,080 - ai_hr_saas - DEBUG - Cache SET: ollama_195740796458249168
+2026-03-03 10:05:22,104 - ai_hr_saas - INFO - Job description generated: Hr executive
+2026-03-03 10:14:12,328 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-03 10:14:27,321 - ai_hr_saas - DEBUG - Cache SET: ollama_-9046017611666241599
+2026-03-03 10:14:27,334 - ai_hr_saas - ERROR - Error creating InterviewQuestionsResponse: 2 validation errors for InterviewQuestionsResponse
+practical_tasks.0
+  Input should be a valid string [type=string_type, input_value={'type': 'case-study', 't...e a smooth transition?'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+practical_tasks.1
+  Input should be a valid string [type=string_type, input_value={'type': 'role-play', 'ta...r communication skills'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+2026-03-03 10:14:27,334 - ai_hr_saas - ERROR - json_data was: {'technical_questions': [{'type': 'multiple-choice', 'question': 'What is the primary purpose of a Human Resource Information System (HRIS)?', 'answers': ['To track employee attendance', 'To manage payroll and benefits', 'To store and manage HR-related documents and data'], 'correct_answer': 2}, {'type': 'short-answer', 'question': "Explain the concept of 'work culture' in an organization. How can it impact employee engagement?"}, {'type': 'multiple-choice', 'question': 'Which of the following is NOT a type of recruitment method?', 'answers': ['Recruitment agency', 'Employee referral program', 'Social media advertising'], 'correct_answer': 3}], 'behavioral_questions': [{'type': 'storytelling', 'question': "Tell me about a time when you had to work with a team to complete a task. What was your role, and how did you contribute to the team's success?"}, {'type': 'situational', 'question': 'Imagine you are an HR representative, and an employee is requesting a leave of absence due to personal reasons. How would you handle this situation?'}, {'type': 'practical-skill', 'question': 'Write a short email to an employee inviting them for a performance review meeting'}], 'practical_tasks': [{'type': 'case-study', 'task': 'A university is implementing a new student recruitment strategy. The current system is manual, and the HR team needs to migrate it to an online platform. What steps would you take as an HR executive to ensure a smooth transition?'}, {'type': 'role-play', 'task': 'You are an HR representative at a university, and an employee is requesting a leave of absence due to personal reasons. Role-play the conversation with me, and demonstrate your communication skills'}]}
+2026-03-03 10:14:44,123 - ai_hr_saas - DEBUG - Cache HIT: ollama_-9046017611666241599
+2026-03-03 10:14:44,137 - ai_hr_saas - ERROR - Error creating InterviewQuestionsResponse: 2 validation errors for InterviewQuestionsResponse
+practical_tasks.0
+  Input should be a valid string [type=string_type, input_value={'type': 'case-study', 't...e a smooth transition?'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+practical_tasks.1
+  Input should be a valid string [type=string_type, input_value={'type': 'role-play', 'ta...r communication skills'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+2026-03-03 10:14:44,138 - ai_hr_saas - ERROR - json_data was: {'technical_questions': [{'type': 'multiple-choice', 'question': 'What is the primary purpose of a Human Resource Information System (HRIS)?', 'answers': ['To track employee attendance', 'To manage payroll and benefits', 'To store and manage HR-related documents and data'], 'correct_answer': 2}, {'type': 'short-answer', 'question': "Explain the concept of 'work culture' in an organization. How can it impact employee engagement?"}, {'type': 'multiple-choice', 'question': 'Which of the following is NOT a type of recruitment method?', 'answers': ['Recruitment agency', 'Employee referral program', 'Social media advertising'], 'correct_answer': 3}], 'behavioral_questions': [{'type': 'storytelling', 'question': "Tell me about a time when you had to work with a team to complete a task. What was your role, and how did you contribute to the team's success?"}, {'type': 'situational', 'question': 'Imagine you are an HR representative, and an employee is requesting a leave of absence due to personal reasons. How would you handle this situation?'}, {'type': 'practical-skill', 'question': 'Write a short email to an employee inviting them for a performance review meeting'}], 'practical_tasks': [{'type': 'case-study', 'task': 'A university is implementing a new student recruitment strategy. The current system is manual, and the HR team needs to migrate it to an online platform. What steps would you take as an HR executive to ensure a smooth transition?'}, {'type': 'role-play', 'task': 'You are an HR representative at a university, and an employee is requesting a leave of absence due to personal reasons. Role-play the conversation with me, and demonstrate your communication skills'}]}
+2026-03-03 10:15:41,420 - ai_hr_saas - DEBUG - Cache HIT: ollama_-9046017611666241599
+2026-03-03 10:15:41,445 - ai_hr_saas - ERROR - Error creating InterviewQuestionsResponse: 2 validation errors for InterviewQuestionsResponse
+practical_tasks.0
+  Input should be a valid string [type=string_type, input_value={'type': 'case-study', 't...e a smooth transition?'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+practical_tasks.1
+  Input should be a valid string [type=string_type, input_value={'type': 'role-play', 'ta...r communication skills'}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+2026-03-03 10:15:41,446 - ai_hr_saas - ERROR - json_data was: {'technical_questions': [{'type': 'multiple-choice', 'question': 'What is the primary purpose of a Human Resource Information System (HRIS)?', 'answers': ['To track employee attendance', 'To manage payroll and benefits', 'To store and manage HR-related documents and data'], 'correct_answer': 2}, {'type': 'short-answer', 'question': "Explain the concept of 'work culture' in an organization. How can it impact employee engagement?"}, {'type': 'multiple-choice', 'question': 'Which of the following is NOT a type of recruitment method?', 'answers': ['Recruitment agency', 'Employee referral program', 'Social media advertising'], 'correct_answer': 3}], 'behavioral_questions': [{'type': 'storytelling', 'question': "Tell me about a time when you had to work with a team to complete a task. What was your role, and how did you contribute to the team's success?"}, {'type': 'situational', 'question': 'Imagine you are an HR representative, and an employee is requesting a leave of absence due to personal reasons. How would you handle this situation?'}, {'type': 'practical-skill', 'question': 'Write a short email to an employee inviting them for a performance review meeting'}], 'practical_tasks': [{'type': 'case-study', 'task': 'A university is implementing a new student recruitment strategy. The current system is manual, and the HR team needs to migrate it to an online platform. What steps would you take as an HR executive to ensure a smooth transition?'}, {'type': 'role-play', 'task': 'You are an HR representative at a university, and an employee is requesting a leave of absence due to personal reasons. Role-play the conversation with me, and demonstrate your communication skills'}]}
+2026-03-03 10:16:01,480 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-03 10:16:08,442 - ai_hr_saas - DEBUG - Cache SET: ollama_-4128330898656401672
+2026-03-03 10:16:08,457 - ai_hr_saas - INFO - Interview questions generated for resume 11
+2026-03-03 10:16:39,412 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-03 10:16:51,920 - ai_hr_saas - DEBUG - Cache SET: ollama_823714999778049868
+2026-03-03 10:16:51,929 - ai_hr_saas - ERROR - Error creating InterviewQuestionsResponse: 2 validation errors for InterviewQuestionsResponse
+practical_tasks.0
+  Input should be a valid string [type=string_type, input_value={'task': 'Assume you are ...res.', 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+practical_tasks.1
+  Input should be a valid string [type=string_type, input_value={'task': 'You are tasked ...ods.', 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+2026-03-03 10:16:51,930 - ai_hr_saas - ERROR - json_data was: {'technical_questions': [{'question': 'What is the primary purpose of an Employee Handbook, and how does it impact HR operations?', 'answer_key': 'The primary purpose of an Employee Handbook is to outline company policies, procedures, and expectations. As an HR Manager, understanding its significance in setting a positive work environment and ensuring compliance with labor laws is crucial.'}, {'question': 'How would you ensure the confidentiality and integrity of employee records in an organization?', 'answer_key': 'To maintain confidentiality and integrity, I would implement secure storage systems, restrict access to authorized personnel, and establish protocols for handling sensitive information. Additionally, regular audits and data backups would be essential.'}, {'question': 'What is the difference between a Termination Letter and an Offer Letter? Please provide examples of when each is used.', 'answer_key': 'A Termination Letter notifies employees of their dismissal, while an Offer Letter extends job offers to new hires. I would use these documents according to organizational policies and procedures, ensuring compliance with labor laws and regulations.'}], 'behavioral_questions': [{'question': 'Tell me about a time when you had to communicate complex information to someone with limited knowledge. How did you approach the situation?', 'answer_key': 'In my finance internship, I had to explain financial concepts to team members without prior knowledge. I broke it down into simple terms, used visual aids, and provided examples to ensure understanding.'}, {'question': 'Describe a situation where you had to work with a difficult team member or customer. How did you resolve the issue?', 'answer_key': 'During my internship, I encountered a colleague who had different work styles. I listened to their concerns, remained calm, and offered alternative solutions that met both our needs. We were able to find a compromise.'}, {'question': 'Can you share an experience where you went above and beyond in your previous role or internship? What did you achieve, and what skills did you utilize?', 'answer_key': 'In my finance internship, I helped prepare reports using MS Excel. I volunteered to work on a project, which required me to expand my technical skills and present the findings to management. This experience boosted my confidence in data analysis.'}], 'practical_tasks': [{'task': 'Assume you are an HR Manager at a startup with 50 employees. You need to implement an employee recognition program. Design the program, including its benefits and procedures.', 'answer_key': ''}, {'task': 'You are tasked with training new hires on company policies and procedures. Create a comprehensive training plan, including the content to be covered, the duration of each session, and evaluation methods.', 'answer_key': ''}]}
+2026-03-03 10:18:43,555 - ai_hr_saas - DEBUG - Calling Ollama API with model: llama3.2:3b
+2026-03-03 10:18:53,498 - ai_hr_saas - DEBUG - Cache SET: ollama_1557812424848894992
+2026-03-03 10:18:53,506 - ai_hr_saas - ERROR - Error creating InterviewQuestionsResponse: 6 validation errors for InterviewQuestionsResponse
+technical_questions.0
+  Input should be a valid string [type=string_type, input_value={'description': 'What is ...': 15, 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+technical_questions.1
+  Input should be a valid string [type=string_type, input_value={'description': 'Explain ...': 20, 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+technical_questions.2
+  Input should be a valid string [type=string_type, input_value={'description': "A compan...': 25, 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+behavioral_questions.0
+  Input should be a valid string [type=string_type, input_value={'description': 'Tell me ...': 20, 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+behavioral_questions.1
+  Input should be a valid string [type=string_type, input_value={'description': 'Can you ...': 25, 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+behavioral_questions.2
+  Input should be a valid string [type=string_type, input_value={'description': 'Explain ...': 20, 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+2026-03-03 10:18:53,507 - ai_hr_saas - ERROR - json_data was: {'technical_questions': [{'description': 'What is the difference between a Current Ratio and a Quick Ratio? Provide an example of each.', 'marks': 15, 'answer_key': ''}, {'description': 'Explain the concept of accruals in accounting. How do they differ from depreciation?', 'marks': 20, 'answer_key': ''}, {'description': "A company's Balance Sheet shows a net worth of $100,000 and total liabilities of $80,000. What is the company's equity? Explain how you arrived at this figure.", 'marks': 25, 'answer_key': ''}], 'behavioral_questions': [{'description': 'Tell me about a time when you had to coordinate with multiple stakeholders to complete a task. How did you ensure everyone was on the same page?', 'marks': 20, 'answer_key': ''}, {'description': 'Can you describe a situation where you had to make a difficult decision with limited information? How did you approach it?', 'marks': 25, 'answer_key': ''}, {'description': 'Explain how you handle conflicting priorities and deadlines in a fast-paced work environment.', 'marks': 20, 'answer_key': ''}], 'practical_tasks': [{'description': 'You are the Finance Manager of a small startup. The company has just received an investment of $100,000 from a venture capitalist. How would you manage this influx of funds? Provide a simple budget allocation plan.', 'marks': 30, 'time_limit': 10}, {'description': "You are tasked with preparing the financial reports for the company's quarterly earnings call. The CEO is expecting you to present a comprehensive report that highlights both the company's strengths and weaknesses. How would you approach this task?", 'marks': 30, 'time_limit': 10}]}
+2026-03-03 10:19:03,207 - ai_hr_saas - DEBUG - Cache HIT: ollama_1557812424848894992
+2026-03-03 10:19:03,230 - ai_hr_saas - ERROR - Error creating InterviewQuestionsResponse: 6 validation errors for InterviewQuestionsResponse
+technical_questions.0
+  Input should be a valid string [type=string_type, input_value={'description': 'What is ...': 15, 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+technical_questions.1
+  Input should be a valid string [type=string_type, input_value={'description': 'Explain ...': 20, 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+technical_questions.2
+  Input should be a valid string [type=string_type, input_value={'description': "A compan...': 25, 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+behavioral_questions.0
+  Input should be a valid string [type=string_type, input_value={'description': 'Tell me ...': 20, 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+behavioral_questions.1
+  Input should be a valid string [type=string_type, input_value={'description': 'Can you ...': 25, 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+behavioral_questions.2
+  Input should be a valid string [type=string_type, input_value={'description': 'Explain ...': 20, 'answer_key': ''}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.12/v/string_type
+2026-03-03 10:19:03,232 - ai_hr_saas - ERROR - json_data was: {'technical_questions': [{'description': 'What is the difference between a Current Ratio and a Quick Ratio? Provide an example of each.', 'marks': 15, 'answer_key': ''}, {'description': 'Explain the concept of accruals in accounting. How do they differ from depreciation?', 'marks': 20, 'answer_key': ''}, {'description': "A company's Balance Sheet shows a net worth of $100,000 and total liabilities of $80,000. What is the company's equity? Explain how you arrived at this figure.", 'marks': 25, 'answer_key': ''}], 'behavioral_questions': [{'description': 'Tell me about a time when you had to coordinate with multiple stakeholders to complete a task. How did you ensure everyone was on the same page?', 'marks': 20, 'answer_key': ''}, {'description': 'Can you describe a situation where you had to make a difficult decision with limited information? How did you approach it?', 'marks': 25, 'answer_key': ''}, {'description': 'Explain how you handle conflicting priorities and deadlines in a fast-paced work environment.', 'marks': 20, 'answer_key': ''}], 'practical_tasks': [{'description': 'You are the Finance Manager of a small startup. The company has just received an investment of $100,000 from a venture capitalist. How would you manage this influx of funds? Provide a simple budget allocation plan.', 'marks': 30, 'time_limit': 10}, {'description': "You are tasked with preparing the financial reports for the company's quarterly earnings call. The CEO is expecting you to present a comprehensive report that highlights both the company's strengths and weaknesses. How would you approach this task?", 'marks': 30, 'time_limit': 10}]}

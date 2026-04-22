@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  # Ollama LLM Service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai_hr_ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_NUM_THREAD=4
+      - OLLAMA_NUM_GPU=0  # Set to 1 if using GPU
+    volumes:
+      - ollama_data:/root/.ollama
+    command: ollama serve
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ai_hr_network
+
+  # Backend API Service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_hr_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./ai_hr_saas.db
+      - OLLAMA_API_URL=http://ollama:11434
+      - LLM_MODEL=llama3.2:3b
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - ENV=development
+      - WORKERS=4
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./backend:/app/backend
+    depends_on:
+      ollama:
+        condition: service_healthy
+    command: python backend/main.py
+    networks:
+      - ai_hr_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend Service
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_hr_frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE_URL=http://backend:8000
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    volumes:
+      - ./frontend:/app/frontend
+      - ./data:/app/data
+    depends_on:
+      - backend
+    command: streamlit run frontend/streamlit_app.py
+    networks:
+      - ai_hr_network
+
+  # PostgreSQL (optional, for production)
+  # postgres:
+  #   image: postgres:15
+  #   container_name: ai_hr_postgres
+  #   environment:
+  #     - POSTGRES_DB=ai_hr_saas
+  #     - POSTGRES_USER=hr_user
+  #     - POSTGRES_PASSWORD=${DB_PASSWORD:-change-me}
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   networks:
+  #     - ai_hr_network
+
+volumes:
+  ollama_data:
+  # postgres_data:
+
+networks:
+  ai_hr_network:
+    driver: bridge
