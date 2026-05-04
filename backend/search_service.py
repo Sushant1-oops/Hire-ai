@@ -7,8 +7,6 @@ Supports batch encoding for handling hundreds of resumes efficiently.
 import os
 import numpy as np
 from typing import List, Dict, Optional, Tuple
-from sentence_transformers import SentenceTransformer
-import faiss
 from sqlalchemy.orm import Session
 from models import Resume
 from utils import logger, ensure_directory, save_pickle, load_pickle, SimpleCache, safe_json_loads
@@ -40,14 +38,16 @@ class SemanticSearchService:
     def _load_model(cls):
         """Load sentence transformer model (singleton)."""
         if cls._model is None:
+            from sentence_transformers import SentenceTransformer
             logger.info(f"Loading embedding model: {cls.EMBEDDING_MODEL}")
             cls._model = SentenceTransformer(cls.EMBEDDING_MODEL)
             logger.info("✓ Model loaded successfully")
         return cls._model
 
     @classmethod
-    def _load_or_create_index(cls) -> Tuple[faiss.IndexFlatIP, Dict]:
+    def _load_or_create_index(cls) -> Tuple["faiss.IndexFlatIP", Dict]:
         """Load existing FAISS index or create a new cosine-similarity index."""
+        import faiss
         if os.path.exists(cls.FAISS_INDEX_PATH):
             try:
                 cls._index = faiss.read_index(cls.FAISS_INDEX_PATH)
@@ -160,6 +160,7 @@ class SemanticSearchService:
 
     def save_index(self) -> bool:
         """Save FAISS index to disk."""
+        import faiss
         try:
             faiss.write_index(self.index, self.FAISS_INDEX_PATH)
             save_pickle(self.resume_embeddings, self.RESUME_EMBEDDINGS_PATH)
@@ -300,6 +301,7 @@ class SemanticSearchService:
                 Resume.is_processed == True
             ).all()
 
+            import faiss
             # Create new cosine-similarity index
             self.__class__._index = faiss.IndexFlatIP(self.EMBEDDING_DIMENSION)
             self.__class__._resume_embeddings = {}

@@ -94,11 +94,16 @@ class ScoringService:
         """
         Calculate experience match score (0-1) using a smooth curve.
         """
-        if candidate_experience is None:
-            return 0.4  # Low-neutral if unknown
-
         required_min = required_min_experience or 0
         ideal = nice_to_have_experience or (required_min + 5)
+
+        if candidate_experience is None:
+            # If they don't list dates, they are likely a student/fresher.
+            # If the job requires 0 years (entry level), a fresher is a good fit!
+            if required_min == 0:
+                return 0.7
+            # If the job requires actual experience (e.g. 5 years) but they list none, penalize them.
+            return 0.4
 
         if required_min == 0 and ideal == 5:
             # No experience requirement specified — be generous

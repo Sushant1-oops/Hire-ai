@@ -180,7 +180,7 @@ SKILLS_DATABASE = {
     "Excel", "Google Sheets", "Data Visualization",
 
     # ── AI / ML / Deep Learning ────────────────────────────────────
-    "Machine Learning", "Deep Learning", "Neural Networks",
+    "Machine Learning", "Deep Learning", "Neural Networks", "CNN", "RNN", "LSTM", "GRU", "ANN",
     "TensorFlow", "PyTorch", "Keras", "Scikit-learn", "sklearn",
     "XGBoost", "LightGBM", "CatBoost", "Random Forest",
     "Natural Language Processing", "NLP", "Computer Vision",
@@ -230,6 +230,7 @@ SKILLS_DATABASE = {
     "OWASP", "Encryption", "SSL/TLS", "PKI",
     "IAM", "RBAC", "Zero Trust", "SOC 2", "GDPR", "HIPAA",
     "Firewalls", "IDS/IPS", "SIEM", "Security Auditing",
+    "Authentication", "Authorization",
 
     # ── Soft Skills ────────────────────────────────────────────────
     "Communication", "Leadership", "Teamwork", "Problem Solving",

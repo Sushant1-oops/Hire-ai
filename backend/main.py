@@ -4,6 +4,11 @@ Complete REST API with authentication, resume management, semantic search, and A
 """
 
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from the root .env file
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
+
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -26,7 +31,8 @@ from resume_service import ResumeService
 from search_service import get_search_service
 from scoring_service import ScoringService, ScoringAnalytics
 from llm_service import (
-    check_ollama_health, analyze_candidate_match, generate_interview_questions,
+    check_ollama_health, check_groq_health, get_llm_status, get_active_provider,
+    analyze_candidate_match, generate_interview_questions,
     generate_outreach_email, generate_job_description,
     MatchAnalysisRequest, InterviewQuestionsRequest, OutreachEmailRequest, JobDescriptionRequest
 )
@@ -108,11 +114,13 @@ class RefreshTokenRequest(BaseModel):
 # ==================== HEALTH ====================
 @app.get("/health")
 async def health_check():
-    ollama_healthy = check_ollama_health()
+    llm_status = get_llm_status()
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "ollama": "connected" if ollama_healthy else "disconnected"
+        "active_llm_provider": llm_status["active_provider"],
+        "groq": llm_status["groq"],
+        "ollama": llm_status["ollama"],
     }
 
 @app.post("/api/setup")
@@ -544,6 +552,10 @@ async def generate_email_endpoint(payload: GenerateOutreachEmailPayload, current
 @app.post("/api/email/send")
 async def send_email_endpoint(payload: SendEmailPayload, current_user: User = Depends(get_current_user)):
     """Send an email via SMTP."""
+    # Force reload of dotenv in case the user updated .env without restarting the app
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'), override=True)
+    
     smtp_server = os.getenv("SMTP_SERVER")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USERNAME")
@@ -556,20 +568,42 @@ async def send_email_endpoint(payload: SendEmailPayload, current_user: User = De
     try:
         msg = MIMEMultipart()
         msg["From"] = sender
-        msg["To"] = payload.to_email
-        msg["Subject"] = payload.subject
-        msg.attach(MIMEText(payload.body, "plain"))
+        
+        # Handle multiple emails safely
+        to_emails = [e.strip() for e in payload.to_email.split(',')] if ',' in payload.to_email else [payload.to_email.strip()]
+        msg["To"] = ", ".join(to_emails)
+        
+        # Remove any newlines from subject to prevent header injection errors
+        clean_subject = "".join(payload.subject.splitlines())
+        msg["Subject"] = clean_subject
+        
+        # Convert plain text to styled HTML for proper formatting in email clients
+        paragraphs = payload.body.split("\n\n")
+        html_paragraphs = "".join(f"<p style='margin: 0 0 12px 0; line-height: 1.6;'>{p.replace(chr(10), '<br>')}</p>" for p in paragraphs if p.strip())
+        html_body = f"""
+        <html>
+        <body style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            {html_paragraphs}
+        </body>
+        </html>
+        """
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.starttls()
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(sender, payload.to_email, msg.as_string())
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(sender, to_emails, msg.as_string())
+        else:
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(sender, to_emails, msg.as_string())
 
         logger.info(f"Email sent to {payload.to_email}")
         return success_response(message="Email sent successfully")
     except Exception as e:
         logger.error(f"Email send error: {str(e)}")
-        return error_response(500, "Failed to send email", str(e))
+        return error_response(500, f"Failed to send email: {str(e)}")
 
 
 @app.post("/api/ai/generate-job-description")

@@ -8,3 +8,5 @@ last_name
     For further information visit https://errors.pydantic.dev/2.12/v/string_type
 2026-04-22 21:35:46,682 - ai_hr_saas - INFO - Starting AI HR SaaS backend on port 8000
 2026-04-22 21:37:52,556 - ai_hr_saas - INFO - New user registered: test@company.com
+2026-04-22 21:40:16,117 - ai_hr_saas - INFO - Loading embedding model: all-MiniLM-L6-v2
+2026-04-22 21:40:25,612 - ai_hr_saas - INFO - Resume uploaded: Sushant_resume_AI (1).pdf (ID: 1)
