@@ -89,12 +89,12 @@ export default function DashboardPage() {
           <span
             style={{
               color:
-                health?.ollama === "connected"
+                health?.ollama?.healthy === true
                   ? "var(--emerald)"
                   : "var(--amber)",
             }}
           >
-            {health?.ollama ?? "unknown"}
+            {health?.ollama?.healthy ? "connected" : "disconnected"}
           </span>
         </span>
       </div>
