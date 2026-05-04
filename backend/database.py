@@ -44,8 +44,7 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor.close()
 
 
-# Create all tables
-Base.metadata.create_all(bind=engine)
+# Create all tables is handled in init_db() or via /api/setup endpoint
 
 # Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
