@@ -158,6 +158,24 @@ class SemanticSearchService:
             logger.error(f"✗ Error batch adding resumes: {str(e)}")
             return False
 
+    def remove_resume(self, resume_id: int) -> bool:
+        """
+        Soft delete a resume from the index by removing its mapping.
+        The vector remains in FAISS but will be ignored during search.
+        """
+        try:
+            vector_ids_to_remove = [
+                vid for vid, info in self.resume_embeddings.items()
+                if info.get("resume_id") == resume_id
+            ]
+            for vid in vector_ids_to_remove:
+                del self.resume_embeddings[vid]
+            logger.info(f"✓ Removed resume {resume_id} mapping from index")
+            return True
+        except Exception as e:
+            logger.error(f"✗ Error removing resume: {str(e)}")
+            return False
+
     def save_index(self) -> bool:
         """Save FAISS index to disk."""
         import faiss

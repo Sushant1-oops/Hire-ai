@@ -370,17 +370,14 @@ class ResumeService:
             db.commit()
             logger.info(f"✓ Deleted resume record: ID={resume_id}")
 
-            # Clear cache and rebuild index
-            for cache_file in ["data/resume_embeddings.pkl", "data/faiss_index.bin"]:
-                if os.path.exists(cache_file):
-                    os.remove(cache_file)
-
+            # Fast soft-delete from index
             try:
-                search_service = SemanticSearchService()
-                search_service.rebuild_index(db, user_id)
-                logger.info(f"✓ Rebuilt search index after deleting resume {resume_id}")
+                from search_service import get_search_service
+                search_service = get_search_service()
+                search_service.remove_resume(resume_id)
+                search_service.save_index()
             except Exception as e:
-                logger.warning(f"⚠ Failed to rebuild search index: {str(e)}")
+                logger.warning(f"⚠ Failed to remove from search index: {str(e)}")
 
             return True
 
