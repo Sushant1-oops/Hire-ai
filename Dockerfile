@@ -1,33 +1,38 @@
-# Multi-stage build for AI HR SaaS
-FROM python:3.11-slim as base
+FROM python:3.11-slim
 
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Install system dependencies (build-essential needed for some python packages like FAISS or standard C extensions)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
+# Hugging Face Spaces requires running as a non-root user
+RUN useradd -m -u 1000 user
+USER user
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH \
+    # Tell huggingface to cache models in the user's home directory so it has write access
+    HF_HOME=/home/user/.cache/huggingface
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+WORKDIR $HOME/app
 
-# Copy application code
-COPY . .
+# Copy requirements and install
+# We copy this first to leverage Docker layer caching
+COPY --chown=user:user requirements.txt .
 
-# Create data directory
-RUN mkdir -p data/resumes logs
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Expose ports
-EXPOSE 8000 8501
+# Copy the backend code into the container
+COPY --chown=user:user backend/ ./backend/
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# Set working directory to the backend directory so relative paths work (like data/)
+WORKDIR $HOME/app/backend
 
-# Default command starts the backend
-CMD ["python", "backend/main.py"]
+# Ensure data directory exists and is writable
+RUN mkdir -p data
+
+# Expose port 7860 which is the default for Hugging Face Spaces
+EXPOSE 7860
+
+# Run the FastAPI server on port 7860
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
