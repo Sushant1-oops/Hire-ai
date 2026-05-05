@@ -110,7 +110,7 @@ def check_groq_health() -> bool:
         response = requests.get(
             "https://api.groq.com/openai/v1/models",
             headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
-            timeout=10
+            timeout=3
         )
         return response.status_code == 200
     except Exception as e:
@@ -182,7 +182,7 @@ def _generate_with_groq(prompt: str, system_prompt: Optional[str] = None) -> Opt
 def check_ollama_health() -> bool:
     """Check if Ollama service is running."""
     try:
-        response = requests.get(f"{OLLAMA_API_URL}/api/tags", timeout=10)
+        response = requests.get(f"{OLLAMA_API_URL}/api/tags", timeout=2)
         return response.status_code == 200
     except Exception as e:
         logger.error(f"Ollama service not available: {str(e)}")
