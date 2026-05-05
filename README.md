@@ -1,3 +1,12 @@
+---
+title: HireAI Backend
+emoji: 🚀
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
+
 # 🤖 AI Semantic Hiring Assistant - Production-Ready HR SaaS
 
 A complete, open-source AI-powered platform that enables recruiters to perform semantic search on resumes, generate AI-powered candidate analysis, interview questions, and outreach emails using advanced NLP and hybrid scoring algorithms.
