@@ -549,8 +549,10 @@ async def generate_email_endpoint(payload: GenerateOutreachEmailPayload, current
         return error_response(500, "Generation failed", str(e))
 
 
+from fastapi import BackgroundTasks
+
 @app.post("/api/email/send")
-async def send_email_endpoint(payload: SendEmailPayload, current_user: User = Depends(get_current_user)):
+async def send_email_endpoint(payload: SendEmailPayload, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user)):
     """Send an email via SMTP."""
     # Force reload of dotenv in case the user updated .env without restarting the app
     from dotenv import load_dotenv
@@ -565,45 +567,47 @@ async def send_email_endpoint(payload: SendEmailPayload, current_user: User = De
     if not smtp_server or not smtp_user or not smtp_pass:
         return error_response(400, "Email sending not configured. Set SMTP_SERVER, SMTP_USERNAME, SMTP_PASSWORD in .env")
 
-    try:
-        msg = MIMEMultipart()
-        msg["From"] = sender
-        
-        # Handle multiple emails safely
-        to_emails = [e.strip() for e in payload.to_email.split(',')] if ',' in payload.to_email else [payload.to_email.strip()]
-        msg["To"] = ", ".join(to_emails)
-        
-        # Remove any newlines from subject to prevent header injection errors
-        clean_subject = "".join(payload.subject.splitlines())
-        msg["Subject"] = clean_subject
-        
-        # Convert plain text to styled HTML for proper formatting in email clients
-        paragraphs = payload.body.split("\n\n")
-        html_paragraphs = "".join(f"<p style='margin: 0 0 12px 0; line-height: 1.6;'>{p.replace(chr(10), '<br>')}</p>" for p in paragraphs if p.strip())
-        html_body = f"""
-        <html>
-        <body style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            {html_paragraphs}
-        </body>
-        </html>
-        """
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
+    def _send_email_task():
+        try:
+            msg = MIMEMultipart()
+            msg["From"] = sender
+            
+            # Handle multiple emails safely
+            to_emails = [e.strip() for e in payload.to_email.split(',')] if ',' in payload.to_email else [payload.to_email.strip()]
+            msg["To"] = ", ".join(to_emails)
+            
+            # Remove any newlines from subject to prevent header injection errors
+            clean_subject = "".join(payload.subject.splitlines())
+            msg["Subject"] = clean_subject
+            
+            # Convert plain text to styled HTML for proper formatting in email clients
+            paragraphs = payload.body.split("\n\n")
+            html_paragraphs = "".join(f"<p style='margin: 0 0 12px 0; line-height: 1.6;'>{p.replace(chr(10), '<br>')}</p>" for p in paragraphs if p.strip())
+            html_body = f"""
+            <html>
+            <body style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+                {html_paragraphs}
+            </body>
+            </html>
+            """
+            msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-        if smtp_port == 465:
-            with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
-                server.login(smtp_user, smtp_pass)
-                server.sendmail(sender, to_emails, msg.as_string())
-        else:
-            with smtplib.SMTP(smtp_server, smtp_port) as server:
-                server.starttls()
-                server.login(smtp_user, smtp_pass)
-                server.sendmail(sender, to_emails, msg.as_string())
+            if smtp_port == 465:
+                with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+                    server.login(smtp_user, smtp_pass)
+                    server.sendmail(sender, to_emails, msg.as_string())
+            else:
+                with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    server.starttls()
+                    server.login(smtp_user, smtp_pass)
+                    server.sendmail(sender, to_emails, msg.as_string())
+            logger.info(f"✓ Email sent successfully to {payload.to_email}")
+        except Exception as e:
+            logger.error(f"✗ Background email sending failed: {str(e)}")
 
-        logger.info(f"Email sent to {payload.to_email}")
-        return success_response(message="Email sent successfully")
-    except Exception as e:
-        logger.error(f"Email send error: {str(e)}")
-        return error_response(500, f"Failed to send email: {str(e)}")
+    # Add to background tasks so API returns instantly
+    background_tasks.add_task(_send_email_task)
+    return success_response(message="Email queued for sending in the background")
 
 
 @app.post("/api/ai/generate-job-description")
