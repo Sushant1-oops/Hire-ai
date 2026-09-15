@@ -1,0 +1,75 @@
+services:
+  # Ollama LLM Service (used only if GROQ_API_KEY is not set)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ai_hr_ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_NUM_THREAD=4
+      - OLLAMA_NUM_GPU=0 # Set to 1 if using GPU
+    volumes:
+      - ollama_data:/root/.ollama
+    command: ollama serve
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - ai_hr_network
+
+  # Backend API Service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_hr_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./ai_hr_saas.db
+      - OLLAMA_API_URL=http://ollama:11434
+      - LLM_MODEL=llama3.2:3b
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - PORT=8000
+    volumes:
+      - ./backend/data:/home/user/app/backend/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+    # WORKDIR in the image is already backend/, so this must be a bare uvicorn
+    # invocation — "python backend/main.py" (the old command) looked for a
+    # backend/backend/main.py that doesn't exist and would fail to start.
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    networks:
+      - ai_hr_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend Service (TanStack Start / Vite — not Streamlit)
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    container_name: ai_hr_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - ai_hr_network
+
+volumes:
+  ollama_data:
+
+networks:
+  ai_hr_network:
+    driver: bridge
