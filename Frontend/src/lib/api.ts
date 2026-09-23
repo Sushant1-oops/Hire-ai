@@ -86,6 +86,7 @@ interface RequestOptions {
   body?: unknown;
   formData?: FormData;
   signal?: AbortSignal;
+  responseType?: "json" | "blob";
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -129,23 +130,38 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   const status = response.status;
+
+  if (!response.ok) {
+    const text = await response.text();
+    let parsed: unknown = undefined;
+    if (text) {
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        // ignore
+      }
+    }
+    throw new ApiError(extractErrorMessage(parsed, `Request failed (${status})`), status);
+  }
+
+  if (status === 204) return undefined as T;
+
+  if (options.responseType === "blob") {
+    return (await response.blob()) as T;
+  }
+
   const text = await response.text();
   let parsed: unknown = undefined;
   if (text) {
     try {
       parsed = JSON.parse(text);
     } catch {
-          }
+      // ignore
+    }
   }
 
-  if (!response.ok) {
-    throw new ApiError(extractErrorMessage(parsed, `Request failed (${status})`), status);
-  }
+  if (parsed === undefined) return undefined as T;
 
-  if (status === 204 || parsed === undefined) return undefined as T;
-
-  
-  
   const envelope = parsed as Envelope<T>;
   if (envelope && typeof envelope === "object" && "data" in envelope && "error" in envelope) {
     return envelope.data as T;

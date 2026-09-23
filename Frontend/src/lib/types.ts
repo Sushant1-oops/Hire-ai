@@ -27,11 +27,17 @@ export interface Resume {
   skills?: string[];
   experience_years?: number | null;
   created_at?: string;
+  processing_status?: "pending" | "ready" | "failed" | string;
+  processing_error?: string | null;
+  needs_review?: boolean;
 }
 
 export interface ResumeDetail extends Resume {
   education?: EducationEntry[];
   extracted_text?: string;
+  name_confidence?: number | null;
+  used_ocr?: boolean;
+  unrecognised_skills?: string[];
 }
 
 export interface SearchResult {
@@ -67,6 +73,15 @@ export interface DashboardStats {
   recent_searches: { query: string; results_count: number; created_at?: string }[];
 }
 
+export interface MatchEvidence {
+  claim: string;
+  supported: boolean;
+  similarity?: number;
+  chunk_id?: number | null;
+  chunk_index?: number;
+  snippet?: string;
+}
+
 export interface MatchAnalysis {
   recommendation: string;
   match_score: number;
@@ -74,6 +89,10 @@ export interface MatchAnalysis {
   strengths: string[];
   weaknesses: string[];
   missing_skills: string[];
+  matched_skills?: string[];
+  evidence?: MatchEvidence[];
+  security_flags?: string[];
+  ai_explanation_available?: boolean;
 }
 
 export interface InterviewQuestions {

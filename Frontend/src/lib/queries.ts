@@ -45,12 +45,35 @@ export const runSearch = (payload: SearchPayload) =>
     body: payload,
   });
 
+export interface UploadBatchResult {
+  successful: { file: string; resume_id: number; duplicate?: boolean }[];
+  failed: { file: string; error: string }[];
+}
+
 export const uploadResumes = (files: File[]) => {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
-  return apiRequest<{ successful: unknown[]; failed: unknown[] }>("/api/resumes/upload-batch", {
+  return apiRequest<UploadBatchResult>("/api/resumes/upload-batch", {
     formData,
   });
+};
+
+export const openResumeFile = async (id: string | number): Promise<void> => {
+  const blob = await apiRequest<Blob>(`/api/resumes/${id}/file`, {
+    responseType: "blob",
+  });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank");
+  if (!win) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 };
 
 export const deleteResume = (id: string | number) =>
