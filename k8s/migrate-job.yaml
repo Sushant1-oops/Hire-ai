@@ -1,0 +1,20 @@
+# Run before (or on each) rollout:  kubectl apply -f migrate-job.yaml
+# Delete the finished Job before applying it again.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hireai-migrate
+  namespace: hireai
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: hireai-backend:latest      # replace with your registry image
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef: {name: hireai-config}
+            - secretRef: {name: hireai-secrets}

@@ -1,0 +1,38 @@
+# ---- API ----
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+pydantic[email]==2.5.0
+
+# ---- Database ----
+sqlalchemy==2.0.23
+alembic>=1.13,<2
+psycopg2-binary==2.9.9
+pgvector>=0.2.5,<0.4
+
+# ---- Auth ----
+python-jose[cryptography]==3.3.0
+bcrypt==4.1.1
+
+# ---- Resume processing ----
+pdfplumber==0.10.3
+# OCR fallback for scanned PDFs is optional: needs the tesseract binary (installed in the Dockerfile).
+pytesseract>=0.3.10
+# Optional NER fallback for names: pip install spacy && python -m spacy download en_core_web_sm
+
+# ---- Retrieval / ranking ----
+# In Docker, torch is installed first from the CPU wheel index (see Dockerfile) to avoid a multi-GB CUDA download.
+sentence-transformers>=2.6.0
+numpy>=1.26.0
+
+# ---- Queue, cache, object storage ----
+redis>=5.0,<6
+rq>=1.16,<2
+cloudinary>=1.40
+
+# ---- LLM + observability ----
+requests==2.31.0
+langsmith>=0.1.0
+
+# ---- Utilities ----
+python-dotenv==1.0.0

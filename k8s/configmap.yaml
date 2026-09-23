@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hireai-config
+  namespace: hireai
+data:
+  APP_ENV: "production"
+  LOG_FORMAT: "json"
+  TRUST_PROXY: "true"
+  # Pods are ephemeral and replicated, so resumes must live in object storage, not on a pod's disk.
+  STORAGE_BACKEND: "cloudinary"
+  CLOUDINARY_FOLDER: "hireai/resumes"
+  REDIS_URL: "redis://redis:6379/0"
+  ALLOWED_ORIGINS: "https://hireai.example.com"   # change to your frontend origin
+  RERANKER_ENABLED: "true"
+  LLM_REDACT_PII: "true"

@@ -1,0 +1,97 @@
+# docker compose up --build
+# Postgres+pgvector, Redis, a one-shot migration, the API, a queue worker and the frontend.
+# Ollama is optional: docker compose --profile ollama up  (only needed when GROQ_API_KEY is empty).
+
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:-development}
+  DATABASE_URL: postgresql://hireai:${POSTGRES_PASSWORD:-hireai}@postgres:5432/hireai
+  REDIS_URL: redis://redis:6379/0
+  SECRET_KEY: ${SECRET_KEY:-dev-only-secret-key-change-me-0123456789}
+  ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+  STORAGE_BACKEND: ${STORAGE_BACKEND:-auto}
+  CLOUDINARY_URL: ${CLOUDINARY_URL:-}
+  GROQ_API_KEY: ${GROQ_API_KEY:-}
+  OLLAMA_API_URL: ${OLLAMA_API_URL:-http://ollama:11434}
+  LOG_FORMAT: json
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: hireai
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hireai}
+      POSTGRES_DB: hireai
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hireai -d hireai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: {context: ., dockerfile: Dockerfile}
+    command: ["alembic", "upgrade", "head"]
+    environment: *backend-env
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  backend:
+    build: {context: ., dockerfile: Dockerfile}
+    ports: ["8000:8000"]
+    environment: *backend-env
+    volumes:
+      - resume_files:/home/user/app/backend/data/resumes   # only used when STORAGE_BACKEND resolves to local
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  worker:
+    build: {context: ., dockerfile: Dockerfile}
+    command: ["python", "worker.py"]
+    environment: *backend-env
+    volumes:
+      - resume_files:/home/user/app/backend/data/resumes
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports: ["3000:3000"]
+    depends_on: [backend]
+
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  pg_data:
+  redis_data:
+  resume_files:
+  ollama_data:

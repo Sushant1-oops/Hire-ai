@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hireai-api
+  namespace: hireai
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: hireai-api}
+  template:
+    metadata:
+      labels: {app: hireai-api}
+    spec:
+      containers:
+        - name: api
+          image: hireai-backend:latest      # replace with your registry image
+          ports: [{containerPort: 8000}]
+          envFrom:
+            - configMapRef: {name: hireai-config}
+            - secretRef: {name: hireai-secrets}
+          # Model loading happens during startup, so give it room before liveness starts judging.
+          startupProbe:
+            httpGet: {path: /health/live, port: 8000}
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet: {path: /health/ready, port: 8000}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /health/live, port: 8000}
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            requests: {cpu: 500m, memory: 1536Mi}
+            limits: {memory: 2Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hireai-api
+  namespace: hireai
+spec:
+  selector: {app: hireai-api}
+  ports: [{port: 80, targetPort: 8000}]
