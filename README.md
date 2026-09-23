@@ -1,3 +1,11 @@
+---
+title: HireAI Backend
+emoji: 🤖
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 8000
+---
 # HireAI
 
 Multi-tenant recruiting platform. HR users upload resumes or share a public apply link; HireAI parses each resume, ranks candidates against a job, and uses an LLM to explain, not decide.
