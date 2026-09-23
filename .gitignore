@@ -62,3 +62,6 @@ faiss_index.bin
 
 #test
 tests/
+
+#kubernetes
+k8s/
