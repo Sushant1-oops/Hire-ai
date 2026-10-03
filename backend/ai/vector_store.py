@@ -5,7 +5,6 @@ from sqlalchemy import Float, or_
 from sqlalchemy.orm import Session
 
 from models import Resume, ResumeChunk
-from core.utils import logger
 
 
 
@@ -96,6 +95,13 @@ def best_chunk(db: Session, resume_id: int, vec: np.ndarray) -> Optional[Dict]:
         if best is None or sim > best["similarity"]:
             best = {"chunk_id": chunk.id, "chunk_index": chunk.chunk_index, "text": chunk.chunk_text, "similarity": sim}
     return best
+
+
+def chunk_texts(db: Session, chunk_ids: List[int]) -> Dict[int, str]:
+    if not chunk_ids:
+        return {}
+    rows = db.query(ResumeChunk.id, ResumeChunk.chunk_text).filter(ResumeChunk.id.in_(chunk_ids)).all()
+    return {row.id: " ".join(row.chunk_text.split()) for row in rows}
 
 
 def rerank_documents(db: Session, resume_ids: List[int], best_chunk_ids: Optional[Dict[int, int]] = None) -> Dict[int, str]:

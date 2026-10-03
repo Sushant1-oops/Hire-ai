@@ -55,8 +55,8 @@ def run(path: str = DEFAULT, k: int = 5) -> dict:
         scores = {
             "bi_encoder": {rid: bi[rid] for rid in ids},
             "bi_plus_rerank": {rid: blend_semantic(bi[rid], ce.get(rid)) for rid in ids},
-            "hybrid": {rid: hybrid(rid, bi[rid]) for rid in ids},
-            "hybrid_rerank": {rid: hybrid(rid, blend_semantic(bi[rid], ce.get(rid))) for rid in ids},
+            "hybrid": {rid: hybrid(rid, ScoringService.calibrate_semantic(bi[rid])) for rid in ids},
+            "hybrid_rerank": {rid: hybrid(rid, ScoringService.calibrate_semantic(blend_semantic(bi[rid], ce.get(rid)))) for rid in ids},
         }
         gains = data["relevance"].get(job["id"], {})
         relevant = {rid for rid, g in gains.items() if g > 0}

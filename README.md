@@ -21,7 +21,7 @@ search:  tenant + metadata filter → pgvector top 50 → cross-encoder rerank �
 LLM:     explains the engine's result, drafts questions/emails/JDs. Output is schema- and business-validated.
 ```
 
-Why it is built this way: [docs/ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md). What changed and what is still open: [docs/V2_GAP_AUDIT.md](docs/V2_GAP_AUDIT.md).
+What was fixed in the latest audit, and what is still open: [docs/CHANGES.md](docs/CHANGES.md).
 
 ## Run it
 
@@ -62,19 +62,40 @@ python -m evaluation.run_retrieval                # bi-encoder vs +rerank vs hyb
 The bundled datasets are tiny synthetic smoke tests. They prove the harness runs; they do not measure quality. Label real resumes before quoting any number.
 
 ## Layout
+Every module lives in the folder for what kind of thing it is — one canonical copy of each file, nothing duplicated at the backend root.
+
 ```
 backend/
-  main.py              app, middleware, error handling
-  routers/             auth, resumes, jobs (+public apply), search, ai, system
-  models.py            SQLAlchemy models (tenant = HR account = users.id)
-  migrations/          Alembic
-  extraction.py        text/OCR, name+confidence, phone, experience intervals, education
-  chunking.py  embedding_service.py  vector_store.py  reranker.py  search_service.py  scoring_service.py
-  llm_service.py  llm_safety.py    LLM calls, retries, redaction, injection defence, validation
-  storage_service.py   Cloudinary + local
-  queue_service.py  tasks.py  worker.py
-  auth.py  deps.py  rate_limit.py  audit.py  security.py
-  evaluation/  tests/
-k8s/                   manifests (API, worker, Redis, Postgres, HPA, probes, migration job)
-Frontend/              TanStack Start app
+  main.py                app, middleware, error handling (the only loose file — the ASGI entrypoint uvicorn points at)
+
+  routers/                HTTP layer: request/response only, no business logic
+    auth_routes.py  resume_routes.py  job_routes.py  search_routes.py  ai_routes.py  system_routes.py
+
+  core/                   cross-cutting infrastructure everything else depends on
+    config.py  database.py  security.py  rate_limit.py  audit.py  observability.py  utils.py
+
+  auth/                   authentication
+    auth.py (tokens, hashing, register/login)  deps.py (FastAPI auth dependencies)
+
+  models/                 SQLAlchemy models (tenant = HR account = users.id)
+    models.py
+
+  ai/                     resume/text/ML processing — no DB or HTTP concerns
+    extraction.py (OCR, name+confidence, phone, experience intervals, education)
+    skills_extractor.py  chunking.py  vector_store.py  reranker.py  llm_safety.py
+
+  services/               business logic and orchestration — talks to core/auth/ai/models
+    embedding_service.py  search_service.py  scoring_service.py  resume_service.py
+    job_service.py  pipeline_service.py  llm_service.py  storage_service.py
+    cache_service.py  queue_service.py
+
+  workers/                background job processing (separate process from the API)
+    tasks.py (job bodies)  worker.py (RQ entrypoint — run with `python -m workers.worker`)
+
+  migrations/             Alembic
+  evaluation/             extraction/retrieval/LLM quality harnesses + datasets/
+  tests/                  unit tests, mirroring the folders above
+  scripts/                one-off ops scripts, not imported by the app (e.g. verify_pgvector.py)
+
+Frontend/                 TanStack Start app
 ```

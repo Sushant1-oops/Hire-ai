@@ -16,8 +16,6 @@ no-op — zero overhead, nothing imported, nothing sent anywhere.
 """
 import os
 import time
-from typing import Optional
-
 from core.utils import logger
 
 LANGSMITH_ENABLED = (

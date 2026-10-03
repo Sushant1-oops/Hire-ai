@@ -2,7 +2,7 @@ import hashlib
 from typing import Dict, List, Optional
 
 import numpy as np
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from . import embedding_service
 from ai import reranker
@@ -32,6 +32,15 @@ def blend_semantic(bi: float, ce: Optional[float]) -> float:
     if ce is None:
         return bi
     return (1.0 - RERANK_BLEND) * bi + RERANK_BLEND * ce
+
+
+def build_query_text(query: str, job_description: Optional[str] = None) -> str:
+    """The text that is embedded and cross-encoded. The recruiter's own query
+    leads (it carries their intent and survives the embedding model's ~256
+    token window); a pasted job description is appended as context."""
+    query = " ".join((query or "").split())
+    jd = " ".join((job_description or "").split())
+    return f"{query} {jd[:2500]}".strip() if jd else query
 
 
 def index_resume(db: Session, resume: Resume) -> int:
@@ -91,7 +100,8 @@ def semantic_scores(
     for rid in resume_ids:
         bi = bi_scores.get(rid, 0.0)
         ce = ce_scores.get(rid)
-        out[rid] = {"bi": bi, "ce": ce, "semantic": blend_semantic(bi, ce)}
+        blended = blend_semantic(bi, ce)
+        out[rid] = {"bi": bi, "ce": ce, "raw": blended, "semantic": ScoringService.calibrate_semantic(blended)}
     return out
 
 
@@ -114,6 +124,7 @@ def search_with_scoring(
     min_score: Optional[float] = None,
     hard_min_experience: Optional[float] = None,
     must_have_skills: Optional[List[str]] = None,
+    job_description: Optional[str] = None,
 ) -> Dict:
     """retrieve (pgvector, tenant + metadata filtered) -> cross-encoder rerank ->
     deterministic hybrid score. The LLM is not involved in ranking."""
@@ -124,6 +135,7 @@ def search_with_scoring(
     if pool == 0:
         return {"results": [], "summary": empty_summary}
 
+    query = build_query_text(query, job_description)
     qvec = query_vector(query)
     retrieve_k = min(max(RETRIEVE_K, top_k * 3), 200)
     candidates = vector_store.search(db, user_id, qvec, retrieve_k, hard_min_experience)
@@ -131,17 +143,30 @@ def search_with_scoring(
         return {"results": [], "summary": empty_summary}
 
     by_id = {c["resume_id"]: c for c in candidates}
-    resumes = {
-        r.id: r
-        for r in db.query(Resume).filter(Resume.id.in_(list(by_id)), Resume.user_id == user_id).all()
-    }
+    extractor = SkillsExtractor()
+    # Resume text is large. It is only read when some wanted skill is outside the
+    # taxonomy (so it has to be looked up in the text); otherwise it stays unloaded.
+    wanted = extractor.normalize_list((required_skills or []) + (nice_to_have_skills or []) + (must_have_skills or []))
+    needs_text = any(not extractor.is_known(skill) for skill in wanted)
+    resume_query = db.query(Resume).filter(Resume.id.in_(list(by_id)), Resume.user_id == user_id)
+    if not needs_text:
+        resume_query = resume_query.options(defer(Resume.extracted_text))
+    resumes = {r.id: r for r in resume_query.all()}
 
     if must_have_skills:
-        needed = set(SkillsExtractor().extract_from_list(must_have_skills))
-        resumes = {
-            rid: r for rid, r in resumes.items()
-            if needed.issubset(set(SkillsExtractor().extract_from_list(safe_json_loads(r.skills, []))))
-        }
+        needed = extractor.normalize_list(must_have_skills)
+
+        def has_all(resume) -> bool:
+            have = {s.lower() for s in extractor.normalize_list(safe_json_loads(resume.skills, []))}
+            for skill in needed:
+                if skill.lower() in have:
+                    continue
+                # Outside the taxonomy the extracted list can't contain it: look in the text.
+                if extractor.is_known(skill) or not extractor.mentions(resume.extracted_text or "", skill):
+                    return False
+            return True
+
+        resumes = {rid: r for rid, r in resumes.items() if has_all(r)}
     ids = [c["resume_id"] for c in candidates if c["resume_id"] in resumes]
     if not ids:
         return {"results": [], "summary": {**empty_summary, "total_retrieved": len(candidates)}}
@@ -168,6 +193,7 @@ def search_with_scoring(
             required_min_experience=min_experience,
             nice_to_have_skills=nice_to_have_skills,
             nice_to_have_experience=nice_to_have_experience,
+            candidate_text=resume.extracted_text if needs_text else None,
         )
         scores.update({
             "resume_id": rid,
@@ -187,8 +213,14 @@ def search_with_scoring(
     for i, item in enumerate(ranked, 1):
         item["rank"] = i
     above = [r for r in ranked if r["final_score"] >= threshold]
+    top = above[:top_k]
+
+    # Why it matched: the resume passage closest to the query, for the cards that are actually shown.
+    snippets = vector_store.chunk_texts(db, [r["evidence_chunk_id"] for r in top])
+    for item in top:
+        item["evidence_snippet"] = snippets.get(item["evidence_chunk_id"], "")[:260]
     return {
-        "results": above[:top_k],
+        "results": top,
         "summary": {
             "total_in_pool": pool,
             "total_retrieved": len(candidates),

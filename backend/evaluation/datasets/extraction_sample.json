@@ -1,0 +1,30 @@
+{
+  "_note": "Tiny synthetic smoke-test set, NOT a benchmark. Replace with real, consented, labelled resumes before drawing any conclusion.",
+  "cases": [
+    {
+      "id": "syn-1",
+      "text": "Jane Doe\nSenior Backend Engineer\njane.doe@mail.com | (415) 555-2671\n\nExperience\nBackend Developer, Acme   Jan 2019 - Mar 2021\nConsultant, Beta   Jun 2020 - Jun 2022\n\nEducation\nB.E. in Computer Science, XYZ University 2014 - 2018\n\nSkills\nPython, FastAPI, PostgreSQL, Docker, Kubernetes",
+      "expected": {"name": "Jane Doe", "email": "jane.doe@mail.com", "skills": ["Python", "FastAPI", "PostgreSQL", "Docker", "Kubernetes"], "experience_years": 3.5, "experience_tolerance": 0.5}
+    },
+    {
+      "id": "syn-2",
+      "text": "RAHUL SHARMA\nrahul.sharma@example.in\n+91 98765 43210\n\nSummary\n2 years of experience in software development.\n\nSkills\nLanguages: Java, C++, SQL\nTools: Git, Jenkins, Spring Boot",
+      "expected": {"name": "Rahul Sharma", "email": "rahul.sharma@example.in", "skills": ["Java", "C++", "SQL", "Git", "Jenkins", "Spring Boot"], "experience_years": 2.0, "experience_tolerance": 0.1}
+    },
+    {
+      "id": "syn-3",
+      "text": "Priya Nair\npriya.n@example.com\n\nEducation\nB.Tech in CSE, ABC College 2020 - 2024\n\nExperience\nIntern, StartupX   Jun 2023 - Aug 2023\n\nSkills\nPython, React, MongoDB, Machine Learning",
+      "expected": {"name": "Priya Nair", "email": "priya.n@example.com", "skills": ["Python", "React", "MongoDB", "Machine Learning"], "experience_years": 0.2, "experience_tolerance": 0.1}
+    },
+    {
+      "id": "syn-4",
+      "text": "Sushant Thakur | Faridabad, Haryana | +91-9310738102 | thakursushant792@gmail.com\n\nExperience\nAI Engineer, LoversAI (On-site)   Jan'26 - Present\n\nSkills\nPython, PyTorch, LangChain, FAISS, FastAPI, Docker",
+      "expected": {"name": "Sushant Thakur", "email": "thakursushant792@gmail.com", "skills": ["Python", "PyTorch", "LangChain", "FAISS", "FastAPI", "Docker"], "experience_years": 0.7, "experience_tolerance": 0.3}
+    },
+    {
+      "id": "syn-5",
+      "text": "AMIT VERMA\namit.verma@example.com\n\nFresher | Recent graduate seeking entry-level roles\n\nSkills\nJava, SQL, Git",
+      "expected": {"name": "Amit Verma", "email": "amit.verma@example.com", "skills": ["Java", "SQL", "Git"], "experience_years": 0.0, "experience_tolerance": 0.01}
+    }
+  ]
+}

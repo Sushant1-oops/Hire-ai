@@ -1,4 +1,4 @@
-"""Run with:  python worker.py   (needs REDIS_URL)"""
+"""Run with:  python -m workers.worker   (needs REDIS_URL, run from the backend/ directory)"""
 import sys
 
 from services import embedding_service

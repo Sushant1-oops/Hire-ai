@@ -1,12 +1,14 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from ai.extraction import extract_text_from_pdf, parse_resume
 from models import Resume
+from .job_service import JobService
+from .search_service import index_resume
 from .storage_service import StoredFile, get_storage
-from core.utils import logger, safe_json_dumps, safe_json_loads
+from core.utils import logger, safe_json_dumps
 
 
 class ResumeService:
@@ -81,38 +83,49 @@ class ResumeService:
 
     @staticmethod
     def get_user_resumes(db: Session, user_id: int, limit: int = 500) -> List[Resume]:
-        return db.query(Resume).filter(Resume.user_id == user_id).order_by(Resume.created_at.desc()).limit(limit).all()
+        """List view: the (large) text columns stay unloaded."""
+        return (
+            db.query(Resume)
+            .options(defer(Resume.extracted_text), defer(Resume.extraction_meta))
+            .filter(Resume.user_id == user_id)
+            .order_by(Resume.created_at.desc())
+            .limit(limit)
+            .all()
+        )
 
     @staticmethod
-    def get_resume_statistics(db: Session, user_id: int) -> Dict:
-        rows = db.query(Resume.skills, Resume.experience_years).filter(Resume.user_id == user_id).all()
-        total_resumes = len(rows)
-
-        experiences = [r.experience_years for r in rows if r.experience_years is not None]
-        avg_experience = round(sum(experiences) / len(experiences), 1) if experiences else 0.0
-
-        skill_counts: Dict[str, int] = {}
-        for r in rows:
-            for skill in safe_json_loads(r.skills, []) or []:
-                skill_counts[skill] = skill_counts.get(skill, 0) + 1
-        top_skills = [
-            {"skill": skill, "count": count}
-            for skill, count in sorted(skill_counts.items(), key=lambda kv: kv[1], reverse=True)
-        ][:10]
-
-        bands = [("0-2 yrs", 0, 2), ("2-5 yrs", 2, 5), ("5-8 yrs", 5, 8), ("8+ yrs", 8, float("inf"))]
-        distribution = []
-        for label, low, high in bands:
-            count = sum(1 for e in experiences if low <= e < high)
-            if count:
-                distribution.append({"range": label, "count": count})
-
-        return {
-            "total_resumes": total_resumes,
-            "avg_experience": avg_experience,
-            "top_skills": top_skills,
-            "experience_distribution": distribution,
-        }
+    def update_details(
+        db: Session,
+        resume: Resume,
+        candidate_name: Optional[str] = None,
+        candidate_email: Optional[str] = None,
+        candidate_phone: Optional[str] = None,
+        experience_years: Optional[float] = None,
+        fields_set: Optional[set] = None,
+    ) -> Resume:
+        """HR corrects what parsing got wrong. Only fields named in `fields_set` change.
+        A correction counts as verification (confidence becomes 1.0). Experience feeds
+        scoring and the search profile, so changing it re-indexes the resume and clears
+        the stored scores of its applications."""
+        fields_set = fields_set or set()
+        if "candidate_name" in fields_set:
+            resume.candidate_name = (candidate_name or "").strip() or None
+        if "candidate_email" in fields_set:
+            resume.candidate_email = (candidate_email or "").strip().lower() or None
+        if "candidate_phone" in fields_set:
+            resume.candidate_phone = (candidate_phone or "").strip() or None
+        experience_changed = "experience_years" in fields_set and experience_years != resume.experience_years
+        if "experience_years" in fields_set:
+            resume.experience_years = experience_years
+        if fields_set & {"candidate_name", "candidate_email"}:
+            resume.name_confidence = 1.0
+        if experience_changed:
+            if resume.is_processed:
+                index_resume(db, resume)
+            JobService.invalidate_resume_scores(db, [resume.id])
+        db.commit()
+        db.refresh(resume)
+        return resume
 
     @staticmethod
     def delete_resume(db: Session, resume_id: int, user_id: int) -> bool:

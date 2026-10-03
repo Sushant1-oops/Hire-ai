@@ -32,7 +32,16 @@ export interface Resume {
   needs_review?: boolean;
 }
 
+export interface ResumeApplication {
+  application_id: number;
+  job_id: number;
+  job_title: string;
+  status: ApplicationStatus;
+  score: number | null;
+}
+
 export interface ResumeDetail extends Resume {
+  applications?: ResumeApplication[];
   education?: EducationEntry[];
   extracted_text?: string;
   name_confidence?: number | null;
@@ -53,7 +62,9 @@ export interface SearchResult {
   skill_overlap: number;
   matched_skills: string[];
   missing_skills: string[];
+  unverified_skills?: string[];
   recommendation: string;
+  evidence_snippet?: string;
   rank: number;
 }
 
@@ -65,12 +76,37 @@ export interface SearchSummary {
   score_threshold?: number;
 }
 
-export interface DashboardStats {
-  total_resumes: number;
-  avg_experience: number;
-  top_skills: { skill: string; count: number }[];
-  experience_distribution: { range: string; count: number }[];
-  recent_searches: { query: string; results_count: number; created_at?: string }[];
+export interface DashboardData {
+  kpis: {
+    open_jobs: number;
+    closed_jobs: number;
+    total_applications: number;
+    awaiting_decision: number;
+    in_interview_stage: number;
+    hired: number;
+    library_size: number;
+  };
+  pipeline: { status: ApplicationStatus; count: number }[];
+  top_candidates: {
+    application_id: number;
+    job_id: number;
+    resume_id: number;
+    status: ApplicationStatus;
+    score: number;
+    recommendation: string;
+    job_title: string;
+    candidate_name: string | null;
+  }[];
+  jobs: {
+    id: number;
+    title: string;
+    location: string | null;
+    applicants: number;
+    new: number;
+    in_pipeline: number;
+    top_score: number | null;
+  }[];
+  library: { processing: number; failed: number; needs_review: number };
 }
 
 export interface MatchEvidence {
@@ -90,6 +126,9 @@ export interface MatchAnalysis {
   weaknesses: string[];
   missing_skills: string[];
   matched_skills?: string[];
+  unverified_skills?: string[];
+  score_breakdown?: { semantic_similarity: number; skill_overlap: number; experience_match: number };
+  job_id?: number | null;
   evidence?: MatchEvidence[];
   security_flags?: string[];
   ai_explanation_available?: boolean;
@@ -102,6 +141,7 @@ export interface InterviewQuestions {
 }
 
 export interface OutreachEmail {
+  id?: number;
   subject_line: string;
   email_body: string;
   candidate_email?: string | null;
@@ -111,6 +151,7 @@ export interface GeneratedJobDescription {
   job_description: string;
   required_skills: string[];
   nice_to_have_skills: string[];
+  experience_min?: number | null;
 }
 
 export interface Job {
@@ -124,6 +165,9 @@ export interface Job {
   status: "open" | "closed";
   created_at?: string;
   application_count?: number;
+  new_count?: number;
+  in_pipeline?: number;
+  top_score?: number | null;
 }
 
 export interface PublicJob {
@@ -155,6 +199,8 @@ export interface RankedApplication {
   skill_overlap: number;
   matched_skills: string[];
   missing_skills: string[];
+  unverified_skills?: string[];
   recommendation: string;
-  rank: number;
+  /** null while the resume is still processing or has failed */
+  rank: number | null;
 }

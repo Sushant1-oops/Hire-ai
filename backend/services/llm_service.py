@@ -8,19 +8,16 @@ import requests
 from pydantic import BaseModel, Field
 
 from .cache_service import Cache
-from core.config import (
-    GROQ_TIMEOUT, LLM_MAX_INPUT_CHARS, LLM_MAX_RETRIES, LLM_REDACT_PII, OLLAMA_TIMEOUT,
-)
-import os
 from ai.llm_safety import UNTRUSTED_DATA_NOTICE, redact_pii, wrap_untrusted
+from ai.skills_extractor import SkillsExtractor
+from core.config import (
+    GROQ_API_KEY, GROQ_MODEL, GROQ_TIMEOUT, LLM_MAX_INPUT_CHARS, LLM_MAX_RETRIES, LLM_REDACT_PII,
+    OLLAMA_API_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT,
+)
 from core.observability import traceable
 from core.utils import logger
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("LLM_MODEL", "llama3.2:3b")
 
 llm_cache = Cache("llm", 3600 * 24)
 _active_provider = "groq" if GROQ_API_KEY else "ollama"
@@ -102,6 +99,7 @@ class JobDescriptionResponse(BaseModel):
     job_description: str
     required_skills: List[str]
     nice_to_have_skills: List[str]
+    experience_min: Optional[float] = None
 
 
 # ------------------------------------------------------------------ providers
@@ -180,9 +178,12 @@ def generate_text(
     system_prompt: Optional[str] = None,
     pii_names: Optional[List[str]] = None,
     temperature: float = 0.3,
-    use_cache: bool = True,
+    use_cache: bool = False,
 ) -> Optional[str]:
-    """Groq first (with retry/backoff), local Ollama as fallback. Text sent to
+    """Groq first (with retry/backoff), local Ollama as fallback. Responses are
+    cached only when the caller opts in (match analysis, which is low-temperature):
+    creative output such as emails, questions and job descriptions must differ
+    when the recruiter presses "Regenerate". Text sent to
     Groq has contact details, and the candidate names in pii_names, masked; the
     local Ollama model gets the unredacted text because nothing leaves the machine."""
     global _active_provider
@@ -225,6 +226,32 @@ def get_llm_status() -> Dict:
     }
     _status_cache.update(at=now, value=value)
     return value
+
+
+def no_provider_reason() -> str:
+    """A specific, actionable reason no LLM text could be generated, for use in
+    an API error's `details` field. A generic "try again" is useless when the
+    actual cause is almost always "nothing is configured" — the person needs to
+    know whether to set GROQ_API_KEY or start Ollama, not to just retry."""
+    status = get_llm_status()
+    groq, ollama = status["groq"], status["ollama"]
+    if not groq["configured"] and not ollama["healthy"]:
+        return (
+            "No LLM provider is reachable: GROQ_API_KEY is not set, and Ollama is not "
+            f"running at {OLLAMA_API_URL}. Set GROQ_API_KEY in your .env, or start Ollama "
+            f"and run `ollama pull {OLLAMA_MODEL}`."
+        )
+    if groq["configured"] and not groq["healthy"] and not ollama["healthy"]:
+        return (
+            "Groq is configured but not responding (check GROQ_API_KEY is valid and you "
+            f"have quota), and the Ollama fallback is not running at {OLLAMA_API_URL}."
+        )
+    if not groq["configured"] and ollama["healthy"]:
+        return (
+            f"Ollama responded but didn't return usable output. Confirm the model "
+            f"\"{OLLAMA_MODEL}\" is pulled (`ollama pull {OLLAMA_MODEL}`) and try again."
+        )
+    return "The configured AI provider responded but didn't return output in the expected format. Try again."
 
 
 def parse_json_from_text(text: str) -> Optional[Dict]:
@@ -275,7 +302,10 @@ def analyze_candidate_match(request: MatchAnalysisRequest) -> Optional[MatchAnal
         "JOB DESCRIPTION:\n" + request.job_description[:LLM_MAX_INPUT_CHARS // 3] + "\n\n"
         "CANDIDATE RESUME:\n" + wrap_untrusted("resume", request.candidate_resume, LLM_MAX_INPUT_CHARS)
     )
-    text = generate_text(prompt, system_prompt, pii_names=[request.candidate_name] if request.candidate_name else None, temperature=0.2)
+    text = generate_text(
+        prompt, system_prompt, pii_names=[request.candidate_name] if request.candidate_name else None,
+        temperature=0.2, use_cache=True,
+    )
     data = parse_json_from_text(text) if text else None
     if not data:
         return None
@@ -362,7 +392,7 @@ details are not given, say the exact time will be shared separately instead of n
     raw = None
     for attempt in range(2):
         # pii_names stays empty on purpose: the email is addressed to the candidate by name.
-        raw = generate_text(prompt, system_prompt, temperature=0.6, use_cache=(attempt == 0))
+        raw = generate_text(prompt, system_prompt, temperature=0.6)
         data = parse_json_from_text(raw) if raw else None
         if not data:
             continue
@@ -378,26 +408,80 @@ details are not given, say the exact time will be shared separately instead of n
     return None, raw
 
 
+def _flatten_text(value, depth: int = 0) -> str:
+    """Models sometimes return the description as a list of sections or a dict
+    ({"Overview": "...", "Responsibilities": ["..."]}) instead of one string.
+    Render those as readable plain text instead of a Python repr."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, list):
+        lines = []
+        for item in value:
+            text = _flatten_text(item, depth + 1)
+            if text:
+                lines.append(text if "\n" in text or depth == 0 and len(value) == 1 else f"- {text}")
+        return "\n".join(lines)
+    if isinstance(value, dict):
+        blocks = []
+        for key, item in value.items():
+            text = _flatten_text(item, depth + 1)
+            if text:
+                blocks.append(f"{str(key).replace('_', ' ').strip().title()}:\n{text}")
+        return "\n\n".join(blocks)
+    return str(value)
+
+
+_MARKDOWN = re.compile(r"(\*\*|__|^#{1,6}\s*|`)", re.MULTILINE)
+
+
+def _plain_text(text: str) -> str:
+    """Job descriptions are shown as plain text (the public apply page does not render markdown)."""
+    text = _MARKDOWN.sub("", text)
+    text = re.sub(r"^\s*[*•]\s+", "- ", text, flags=re.MULTILINE)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
 @traceable(name="generate_job_description", run_type="chain")
 def generate_job_description(request: JobDescriptionRequest) -> Optional[JobDescriptionResponse]:
     system_prompt = (
-        "You are an expert HR manager. Create a compelling job description. Respond with ONLY valid JSON: "
-        '{"job_description": "Full JD text", "required_skills": ["skill1"], "nice_to_have_skills": ["skill1"]}'
+        "You are an experienced HR manager writing a job posting. Respond with ONLY valid JSON: "
+        '{"job_description": "full posting as one plain-text string", "required_skills": ["skill"], '
+        '"nice_to_have_skills": ["skill"], "min_experience_years": 3}\n'
+        "Rules:\n"
+        "- job_description is PLAIN TEXT, not markdown: no asterisks, no # headings. Use short section titles "
+        "followed by a colon (Overview:, Responsibilities:, Requirements:) and lines starting with '- ' for bullets.\n"
+        "- Use only facts given in the request. Do NOT invent a salary, benefits, perks, team size, location or "
+        "company details. If none were given, leave out any benefits section.\n"
+        "- required_skills: at most 10 short names of concrete skills or tools (e.g. 'PostgreSQL', 'Negotiation'), "
+        "not sentences. nice_to_have_skills: at most 6.\n"
+        "- min_experience_years: a number, or null if the request does not imply one."
     )
     prompt = (
         f"Position: {request.job_title[:150]}\n"
-        f"Company: {request.company_name or 'A growing tech company'}\n"
-        f"Summary: {request.job_shorthand[:1000]}\n"
-        f"Required skills: {', '.join(request.required_skills) if request.required_skills else 'Use industry standard'}\n"
-        "Include role overview, responsibilities, qualifications, and benefits."
+        f"Company: {request.company_name or 'not specified'}\n"
+        f"Summary from the recruiter: {request.job_shorthand[:1500]}\n"
+        f"Required skills already decided: {', '.join(request.required_skills) if request.required_skills else 'none; choose appropriate ones'}"
     )
-    text = generate_text(prompt, system_prompt, temperature=0.6)
+    text = generate_text(prompt, system_prompt, temperature=0.5)
     data = parse_json_from_text(text) if text else None
     if not data:
         return None
-    description = str(data.get("job_description", "")).strip()
-    required = _clean_list(data.get("required_skills"), 20, 60)
-    nice = _clean_list(data.get("nice_to_have_skills"), 15, 60)
+    description = _plain_text(_flatten_text(data.get("job_description")))
+    extractor = SkillsExtractor()
+    required = extractor.normalize_list(_clean_list(data.get("required_skills"), 20, 60), 12)
+    nice = [s for s in extractor.normalize_list(_clean_list(data.get("nice_to_have_skills"), 15, 60), 8)
+            if s.lower() not in {r.lower() for r in required}]
     if len(description) < 80 or not required:
         return None
-    return JobDescriptionResponse(job_description=description[:8000], required_skills=required, nice_to_have_skills=nice)
+    try:
+        years = float(data.get("min_experience_years"))
+        years = years if 0 <= years <= 30 else None
+    except (TypeError, ValueError):
+        years = None
+    return JobDescriptionResponse(
+        job_description=description[:8000], required_skills=required, nice_to_have_skills=nice, experience_min=years,
+    )

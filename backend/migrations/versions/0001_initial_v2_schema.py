@@ -238,4 +238,4 @@ def downgrade() -> None:
         "outreach_emails", "interview_questions", "ai_candidate_matches", "search_results", "search_history",
         "resume_chunks", "resumes", "users",
     ):
-        op.drop_table(table)
+        op.execute(f"DROP TABLE IF EXISTS {table} CASCADE")  # 0002 may already have dropped some

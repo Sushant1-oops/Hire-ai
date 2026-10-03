@@ -1,0 +1,19 @@
+{
+  "_note": "Synthetic smoke-test set (6 resumes, 2 jobs). Too small to measure anything; it only proves the harness runs. Build a real labelled set before comparing pipelines.",
+  "jobs": [
+    {"id": "j1", "text": "Backend engineer building REST APIs with Python, FastAPI and PostgreSQL. Docker and Kubernetes deployment experience.", "required_skills": ["Python", "FastAPI", "PostgreSQL"], "min_experience": 2},
+    {"id": "j2", "text": "Frontend developer with React and TypeScript, building accessible dashboards and design systems.", "required_skills": ["React", "TypeScript"], "min_experience": 2}
+  ],
+  "resumes": [
+    {"id": "r1", "text": "Backend developer. 4 years of experience building FastAPI services on PostgreSQL, deployed with Docker on Kubernetes. Skills: Python, FastAPI, PostgreSQL, Docker, Kubernetes."},
+    {"id": "r2", "text": "Software engineer, 3 years of experience. Built Django REST services with MySQL. Skills: Python, Django, MySQL."},
+    {"id": "r3", "text": "Frontend engineer. 5 years of experience with React and TypeScript, built dashboards and a component library. Skills: React, TypeScript, CSS, Tailwind CSS."},
+    {"id": "r4", "text": "Data analyst with 3 years of experience in Excel, Tableau and SQL reporting. Skills: SQL, Tableau, Excel."},
+    {"id": "r5", "text": "Full stack developer, 3 years of experience. React front ends and Node.js back ends. Skills: React, Node.js, JavaScript, MongoDB."},
+    {"id": "r6", "text": "Fresher with an internship in machine learning. Skills: Python, Machine Learning, Pandas."}
+  ],
+  "relevance": {
+    "j1": {"r1": 3, "r2": 1, "r6": 1},
+    "j2": {"r3": 3, "r5": 2}
+  }
+}

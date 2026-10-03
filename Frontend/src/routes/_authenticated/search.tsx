@@ -1,22 +1,33 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Search as SearchIcon, Loader2, Sparkles, X, Plus } from "lucide-react";
+import { Search as SearchIcon, Loader2, Sparkles, Plus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreRing, MetricBar } from "@/components/score-ring";
 import { CandidateDrawer } from "@/components/candidate-drawer";
 import { AiHub, type AiHubTarget } from "@/components/ai-hub";
-import { runSearch } from "@/lib/queries";
+import { AddToJobDialog } from "@/components/add-to-job-dialog";
+import { RecommendationBadge } from "@/components/recommendation-badge";
+import { mergeSkills, SkillInput, splitSkillText } from "@/components/skill-input";
+import { jobsQuery, runSearch } from "@/lib/queries";
 import type { SearchResult } from "@/lib/types";
 
 export const Route = createFileRoute("/_authenticated/search")({
@@ -38,87 +49,57 @@ export const Route = createFileRoute("/_authenticated/search")({
   component: SearchPage,
 });
 
-function SkillInput({
-  label,
-  skills,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  skills: string[];
-  onChange: (next: string[]) => void;
-  placeholder: string;
-}) {
-  const [draft, setDraft] = useState("");
-  const add = () => {
-    const value = draft.trim();
-    if (!value || skills.includes(value)) return setDraft("");
-    onChange([...skills, value]);
-    setDraft("");
-  };
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <div className="flex gap-2">
-        <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              add();
-            }
-          }}
-          placeholder={placeholder}
-        />
-        <Button
-          type="button"
-          variant="secondary"
-          size="icon"
-          onClick={add}
-          aria-label={`Add ${label}`}
-        >
-          <Plus className="size-4" />
-        </Button>
-      </div>
-      {!!skills.length && (
-        <div className="flex flex-wrap gap-1.5">
-          {skills.map((skill) => (
-            <Badge key={skill} variant="secondary" className="gap-1">
-              {skill}
-              <button
-                type="button"
-                onClick={() => onChange(skills.filter((s) => s !== skill))}
-                aria-label={`Remove ${skill}`}
-              >
-                <X className="size-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function SearchPage() {
   const [query, setQuery] = useState("");
   const [required, setRequired] = useState<string[]>([]);
+  const [requiredDraft, setRequiredDraft] = useState("");
   const [nice, setNice] = useState<string[]>([]);
+  const [niceDraft, setNiceDraft] = useState("");
   const [minExperience, setMinExperience] = useState(0);
   const [jobDescription, setJobDescription] = useState("");
   const [selected, setSelected] = useState<string | number | null>(null);
   const [aiTarget, setAiTarget] = useState<AiHubTarget | null>(null);
+  const [strict, setStrict] = useState(false);
+  const [addToJob, setAddToJob] = useState<{ id: number; name?: string | null | undefined } | null>(null);
+  const { data: jobs } = useQuery(jobsQuery());
+
+  // Start from an existing job: its title, description, skills and minimum experience prefill the form.
+  const loadJob = (id: string) => {
+    const job = jobs?.find((j) => String(j.id) === id);
+    if (!job) return;
+    setQuery(job.title);
+    setJobDescription(job.description);
+    setRequired(job.required_skills ?? []);
+    setRequiredDraft("");
+    setMinExperience(Math.min(20, Math.round(job.experience_min ?? 0)));
+  };
 
   const search = useMutation({
-    mutationFn: () =>
-      runSearch({
+    mutationFn: () => {
+      // Commit anything still sitting in either skill box before searching —
+      // typing a skill and hitting "Search" should always use it, the same as
+      // pressing Enter first would have.
+      const effectiveRequired = mergeSkills(required, splitSkillText(requiredDraft));
+      const effectiveNice = mergeSkills(nice, splitSkillText(niceDraft));
+      if (requiredDraft.trim()) {
+        setRequired(effectiveRequired);
+        setRequiredDraft("");
+      }
+      if (niceDraft.trim()) {
+        setNice(effectiveNice);
+        setNiceDraft("");
+      }
+      return runSearch({
         query,
-        required_skills: required,
-        nice_to_have_skills: nice,
+        required_skills: effectiveRequired,
+        nice_to_have_skills: effectiveNice,
         min_experience: minExperience,
         job_description: jobDescription || undefined,
-      }),
+        // Strict mode turns the soft preferences into hard filters.
+        must_have_skills: strict && effectiveRequired.length ? effectiveRequired : undefined,
+        hard_min_experience: strict && minExperience > 0 ? minExperience : undefined,
+      });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -132,6 +113,24 @@ function SearchPage() {
       <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
         <Card className="h-fit shadow-soft lg:sticky lg:top-24">
           <CardContent className="space-y-5 pt-6">
+            {!!jobs?.length && (
+              <div className="space-y-2">
+                <Label>Start from a job (optional)</Label>
+                <Select onValueChange={loadJob}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pick one of your jobs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {jobs.map((job) => (
+                      <SelectItem key={job.id} value={String(job.id)}>
+                        {job.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>What are you hiring for?</Label>
               <Textarea
@@ -146,12 +145,16 @@ function SearchPage() {
               label="Required skills"
               skills={required}
               onChange={setRequired}
+              draft={requiredDraft}
+              onDraftChange={setRequiredDraft}
               placeholder="Python"
             />
             <SkillInput
               label="Nice to have"
               skills={nice}
               onChange={setNice}
+              draft={niceDraft}
+              onDraftChange={setNiceDraft}
               placeholder="Kubernetes"
             />
 
@@ -177,6 +180,16 @@ function SearchPage() {
                 placeholder="Paste the full JD for a more precise semantic match"
                 className="min-h-24"
               />
+            </div>
+
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
+              <div>
+                <Label htmlFor="strict-mode">Strict matching</Label>
+                <p className="text-xs text-muted-foreground">
+                  Only show candidates that have every required skill and meet the minimum experience.
+                </p>
+              </div>
+              <Switch id="strict-mode" checked={strict} onCheckedChange={setStrict} />
             </div>
 
             <Button
@@ -210,7 +223,7 @@ function SearchPage() {
           {search.isSuccess && !results.length && (
             <Card className="shadow-soft">
               <CardContent className="py-16 text-center text-sm text-muted-foreground">
-                No candidates matched. Try loosening the required skills or experience.
+                No candidates matched. Try turning off strict matching or loosening the required skills.
               </CardContent>
             </Card>
           )}
@@ -242,25 +255,38 @@ function SearchPage() {
                             {result.candidate_email ?? "No email on file"} ·{" "}
                             {result.experience_years ?? 0} yrs
                           </p>
-                          {result.recommendation && (
-                            <p className="mt-2 text-sm leading-relaxed">{result.recommendation}</p>
-                          )}
+                          <RecommendationBadge value={result.recommendation} className="mt-2" />
                         </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() =>
-                            setAiTarget({
-                              resumeId: id,
-                              name: result.candidate_name,
-                              email: result.candidate_email,
-                              query,
-                            })
-                          }
-                        >
-                          <Sparkles className="size-4" /> AI Hub
-                        </Button>
+                        <div className="flex shrink-0 flex-col gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() =>
+                              setAiTarget({
+                                resumeId: id,
+                                name: result.candidate_name,
+                                email: result.candidate_email,
+                                query,
+                              })
+                            }
+                          >
+                            <Sparkles className="size-4" /> AI Hub
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setAddToJob({ id, name: result.candidate_name })}
+                          >
+                            <Plus className="size-4" /> Add to job
+                          </Button>
+                        </div>
                       </div>
+
+                      {result.evidence_snippet && (
+                        <p className="line-clamp-2 rounded-lg bg-muted px-3 py-2 text-xs italic text-muted-foreground">
+                          “{result.evidence_snippet}”
+                        </p>
+                      )}
 
                       <div className="grid gap-3 sm:grid-cols-3">
                         <MetricBar label="Semantic" value={result.semantic_similarity} />
@@ -270,13 +296,13 @@ function SearchPage() {
 
                       <div className="flex flex-wrap gap-1.5">
                         {(result.matched_skills ?? []).map((s) => (
-                          <Badge key={`m-${s}`} variant="secondary">
-                            {s}
+                          <Badge key={`m-${s}`} variant="outline" className="border-success/40 bg-success/10 text-success">
+                            ✓ {s}
                           </Badge>
                         ))}
                         {(result.missing_skills ?? []).map((s) => (
-                          <Badge key={`x-${s}`} variant="outline" className="text-muted-foreground">
-                            {s}
+                          <Badge key={`x-${s}`} variant="outline" className="border-destructive/30 text-destructive">
+                            ✗ {s}
                           </Badge>
                         ))}
                       </div>
@@ -302,6 +328,11 @@ function SearchPage() {
         }
       />
       <AiHub target={aiTarget} onOpenChange={(open) => !open && setAiTarget(null)} />
+      <AddToJobDialog
+        resumeId={addToJob?.id ?? null}
+        candidateName={addToJob?.name}
+        onOpenChange={(open) => !open && setAddToJob(null)}
+      />
     </AppShell>
   );
 }

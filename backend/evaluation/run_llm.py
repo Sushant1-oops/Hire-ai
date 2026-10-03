@@ -15,7 +15,6 @@ from ai.chunking import chunk_resume
 from services.llm_service import MatchAnalysisRequest, analyze_candidate_match
 from core.config import EVIDENCE_MIN_SIMILARITY
 from ai.extraction import parse_resume
-from services.scoring_service import ScoringService
 
 
 def main() -> None:

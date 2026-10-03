@@ -1,13 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { UploadCloud, Loader2, Trash2, RefreshCw } from "lucide-react";
+import { UploadCloud, Loader2, Trash2, RefreshCw, RotateCw, Search as SearchIcon } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
@@ -20,7 +21,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { deleteResume, reindexResumes, resumesQuery, uploadResumes } from "@/lib/queries";
+import { deleteResume, reindexResumes, reprocessResume, resumesQuery, uploadResumes } from "@/lib/queries";
 import { CandidateDrawer, candidateName, candidateYears } from "@/components/candidate-drawer";
 import { AiHub, type AiHubTarget } from "@/components/ai-hub";
 import type { Resume } from "@/lib/types";
@@ -43,10 +44,41 @@ export const Route = createFileRoute("/_authenticated/resumes")({
   component: ResumesPage,
 });
 
+type Filter = "all" | "pending" | "failed" | "review";
+
 function ResumesPage() {
   const queryClient = useQueryClient();
-  const { data, isLoading, error } = useQuery(resumesQuery());
-  const resumes = data ?? [];
+  const { data, isLoading, error } = useQuery({
+    ...resumesQuery(),
+    // Uploads are parsed in the background: keep refreshing while any are pending so
+    // names, skills and status appear without a manual reload.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((r) => r.processing_status === "pending") ? 4000 : false,
+  });
+  const all = data ?? [];
+  const [filter, setFilter] = useState<Filter>("all");
+  const [term, setTerm] = useState("");
+
+  const counts = useMemo(
+    () => ({
+      all: all.length,
+      pending: all.filter((r) => r.processing_status === "pending").length,
+      failed: all.filter((r) => r.processing_status === "failed").length,
+      review: all.filter((r) => r.needs_review).length,
+    }),
+    [all],
+  );
+  const resumes = useMemo(() => {
+    const needle = term.trim().toLowerCase();
+    return all.filter((r) => {
+      if (filter === "pending" && r.processing_status !== "pending") return false;
+      if (filter === "failed" && r.processing_status !== "failed") return false;
+      if (filter === "review" && !r.needs_review) return false;
+      if (!needle) return true;
+      const haystack = [r.candidate_name, r.candidate_email, ...(r.skills ?? [])].join(" ").toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [all, filter, term]);
   const [dragging, setDragging] = useState(false);
   const [selected, setSelected] = useState<string | number | null>(null);
   const [aiTarget, setAiTarget] = useState<AiHubTarget | null>(null);
@@ -70,6 +102,15 @@ function ResumesPage() {
   const reindex = useMutation({
     mutationFn: reindexResumes,
     onSuccess: () => toast.success("Search index rebuilt — try your searches again"),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const retry = useMutation({
+    mutationFn: (id: number) => reprocessResume(id),
+    onSuccess: () => {
+      toast.success("Processing again…");
+      queryClient.invalidateQueries({ queryKey: ["resumes"] });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -109,22 +150,6 @@ function ResumesPage() {
 
   return (
     <AppShell title="Resumes" description="Upload, parse and browse your candidate library">
-      <div className="mb-4 flex justify-end">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => reindex.mutate()}
-          disabled={reindex.isPending}
-          title="Re-embeds your existing resumes with the current search strategy — only needed once after an update, not for new uploads"
-        >
-          {reindex.isPending ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="size-3.5" />
-          )}
-          Rebuild search index
-        </Button>
-      </div>
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -138,7 +163,7 @@ function ResumesPage() {
         }}
         onClick={() => inputRef.current?.click()}
         className={cn(
-          "flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card p-10 text-center transition-colors",
+          "flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card p-8 text-center transition-colors",
           dragging && "border-primary bg-accent/50",
         )}
       >
@@ -148,24 +173,61 @@ function ResumesPage() {
           accept="application/pdf"
           multiple
           hidden
-          onChange={(e) => handleFiles(e.target.files)}
+          onChange={(e) => {
+            handleFiles(e.target.files);
+            e.target.value = ""; // allow choosing the same file again
+          }}
         />
         <motion.span
           animate={{ y: dragging ? -6 : 0 }}
           className="flex size-12 items-center justify-center rounded-2xl bg-accent text-accent-foreground"
         >
-          {upload.isPending ? (
-            <Loader2 className="size-6 animate-spin" />
-          ) : (
-            <UploadCloud className="size-6" />
-          )}
+          {upload.isPending ? <Loader2 className="size-6 animate-spin" /> : <UploadCloud className="size-6" />}
         </motion.span>
-        <p className="mt-4 font-medium">
-          {upload.isPending ? "Uploading resumes..." : "Drop PDF resumes here"}
-        </p>
-        <p className="text-sm text-muted-foreground">
-          or click to browse — multiple files supported
-        </p>
+        <p className="mt-4 font-medium">{upload.isPending ? "Uploading resumes..." : "Drop PDF resumes here"}</p>
+        <p className="text-sm text-muted-foreground">or click to browse — up to 25 PDFs at a time</p>
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-52 flex-1 sm:max-w-xs">
+          <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            placeholder="Filter by name, email or skill"
+            className="pl-9"
+          />
+        </div>
+        {(
+          [
+            ["all", "All"],
+            ["pending", "Processing"],
+            ["review", "Needs check"],
+            ["failed", "Failed"],
+          ] as const
+        ).map(([key, label]) =>
+          key === "all" || counts[key] > 0 || filter === key ? (
+            <Button
+              key={key}
+              size="sm"
+              variant={filter === key ? "default" : "outline"}
+              onClick={() => setFilter(key)}
+            >
+              {label} <span className="ml-1 opacity-70">{counts[key]}</span>
+            </Button>
+          ) : null,
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto"
+          onClick={() => reindex.mutate()}
+          disabled={reindex.isPending}
+          title="Re-embeds your existing resumes with the current search strategy — only needed after an update, not for new uploads"
+        >
+          {reindex.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+          Rebuild search index
+        </Button>
       </div>
 
       {error && (
@@ -217,9 +279,23 @@ function ResumesPage() {
                       </Badge>
                     )}
                     {resume.processing_status === "failed" && (
-                      <Badge variant="destructive" className="mt-1" title={resume.processing_error ?? undefined}>
-                        Could not process
-                      </Badge>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Badge variant="destructive" title={resume.processing_error ?? undefined}>
+                          Could not process
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          disabled={retry.isPending}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            retry.mutate(resume.id);
+                          }}
+                        >
+                          <RotateCw className="size-3" /> Retry
+                        </Button>
+                      </div>
                     )}
                     {resume.processing_status !== "pending" && resume.needs_review && (
                       <Badge variant="outline" className="mt-1" title="Name or email could not be read confidently">
@@ -246,7 +322,7 @@ function ResumesPage() {
 
       {!isLoading && !resumes.length && !error && (
         <p className="mt-8 text-sm text-muted-foreground">
-          No resumes yet — upload a few PDFs to get started.
+          {all.length ? "No resumes match this filter." : "No resumes yet — upload a few PDFs to get started."}
         </p>
       )}
 

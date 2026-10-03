@@ -30,15 +30,17 @@ class SearchRequest(BaseModel):
 
 @router.post("/search")
 def semantic_search(request: SearchRequest, current_user: User = Depends(user_limit("search", 120, 60)), db: Session = Depends(get_db)):
-    required_skills = request.required_skills or []
+    extractor = SkillsExtractor()
+    required_skills = extractor.normalize_list(request.required_skills or [])
     if not required_skills and request.job_description:
-        required_skills = SkillsExtractor().extract(request.job_description)
+        required_skills = extractor.extract(request.job_description)
     try:
         result = search_with_scoring(
             db, current_user.id, request.query, required_skills=required_skills, top_k=request.top_k,
             min_experience=request.min_experience, nice_to_have_skills=request.nice_to_have_skills,
             nice_to_have_experience=request.nice_to_have_experience, min_score=request.min_score,
             hard_min_experience=request.hard_min_experience, must_have_skills=request.must_have_skills,
+            job_description=request.job_description,
         )
     except EmbeddingUnavailable:
         return fail(503, "Search is temporarily unavailable (embedding model not loaded)")

@@ -38,7 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         setUser(JSON.parse(stored) as DisplayUser);
       } catch {
-              }
+        window.localStorage.removeItem(USER_KEY);
+      }
     }
     setIsReady(true);
   }, []);
@@ -72,6 +73,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    // Revoke the refresh-token family server-side (best effort), then forget everything locally.
+    const refresh_token = tokenStore.refresh;
+    if (refresh_token) {
+      apiRequest<void>("/api/auth/logout", { body: { refresh_token } }).catch(() => undefined);
+    }
     tokenStore.clear();
     window.localStorage.removeItem(USER_KEY);
     setUser(null);

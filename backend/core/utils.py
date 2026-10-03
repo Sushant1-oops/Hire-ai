@@ -5,9 +5,8 @@ import logging
 import re
 from datetime import datetime
 from contextvars import ContextVar
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from pathlib import Path
-from ai.skills_extractor import SkillsExtractor
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 
@@ -60,27 +59,6 @@ def setup_logging(name: str = "ai_hr_saas") -> logging.Logger:
     return logger
 
 logger = setup_logging()
-
-def ensure_directory(directory: str) -> Path:
-    path = Path(directory)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-def extract_skills_from_text(text: str) -> List[str]:
-    return SkillsExtractor().extract(text)
-
-def extract_experience_years(text: str) -> Optional[float]:
-    from ai.extraction import extract_experience
-    return extract_experience(text)[0]
-
-def extract_education(text: str) -> List[Dict]:
-    from ai.extraction import extract_education as _extract_education
-    return _extract_education(text)
-
-def clean_text(text: str) -> str:
-    text = ' '.join(text.split())
-    text = re.sub(r'[^\w\s\-.,@+()/:;]', '', text)
-    return text.strip()
 
 def validate_email(email: str) -> bool:
     return re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email) is not None

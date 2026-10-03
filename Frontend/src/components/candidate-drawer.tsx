@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Phone, GraduationCap, Sparkles, Trash2, Loader2, FileText } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { Mail, Phone, GraduationCap, Sparkles, Trash2, Loader2, FileText, Pencil, Briefcase, Plus } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -20,8 +22,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { deleteResume, openResumeFile, resumeQuery } from "@/lib/queries";
+import { AddToJobDialog } from "@/components/add-to-job-dialog";
+import { deleteResume, openResumeFile, resumeQuery, updateResume } from "@/lib/queries";
 import type { Resume } from "@/lib/types";
 import { toast } from "sonner";
 
@@ -53,6 +58,41 @@ export function CandidateDrawer({
     ...resumeQuery(resumeId ?? ""),
     enabled: resumeId !== null,
   });
+  const [addToJobFor, setAddToJobFor] = useState<number | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", phone: "", years: "" });
+
+  // Leaving edit mode whenever a different candidate is opened.
+  useEffect(() => setEditing(false), [resumeId]);
+
+  const save = useMutation({
+    mutationFn: () =>
+      updateResume(data!.id, {
+        candidate_name: form.name.trim() || null,
+        candidate_email: form.email.trim() || null,
+        candidate_phone: form.phone.trim() || null,
+        experience_years: form.years.trim() ? Number(form.years) : null,
+      }),
+    onSuccess: () => {
+      toast.success("Details saved");
+      setEditing(false);
+      queryClient.invalidateQueries({ queryKey: ["resumes"] });
+      queryClient.invalidateQueries({ queryKey: ["jobs"] }); // experience feeds the job scores
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const startEdit = () => {
+    if (!data) return;
+    setForm({
+      name: data.candidate_name ?? "",
+      email: data.candidate_email ?? "",
+      phone: data.candidate_phone ?? "",
+      years: data.experience_years != null ? String(data.experience_years) : "",
+    });
+    setEditing(true);
+  };
 
   const remove = useMutation({
     mutationFn: (id: number) => deleteResume(id),
@@ -70,6 +110,7 @@ export function CandidateDrawer({
     onSuccess: () => {
       toast.success("Resume deleted");
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
     },
     onError: (e: Error, _id, context) => {
       if (context?.previous) queryClient.setQueryData(["resumes"], context.previous);
@@ -106,16 +147,78 @@ export function CandidateDrawer({
                   {data.used_ocr ? " (scanned PDF, text came from OCR)" : ""}. Please check the details below.
                 </p>
               )}
-              <div className="space-y-2 text-sm">
-                {data.candidate_email && (
-                  <p className="flex items-center gap-2">
-                    <Mail className="size-4 text-muted-foreground" /> {data.candidate_email}
+              {editing ? (
+                <div className="space-y-3 rounded-xl border border-border p-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cd-name">Name</Label>
+                    <Input id="cd-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cd-email">Email</Label>
+                      <Input id="cd-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="cd-phone">Phone</Label>
+                      <Input id="cd-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cd-years">Years of experience</Label>
+                    <Input id="cd-years" type="number" min={0} max={60} step={0.5} value={form.years} onChange={(e) => setForm({ ...form, years: e.target.value })} />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()}>
+                      {save.isPending ? <Loader2 className="size-4 animate-spin" /> : null} Save
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2 text-sm">
+                  {data.candidate_email && (
+                    <p className="flex items-center gap-2">
+                      <Mail className="size-4 text-muted-foreground" /> {data.candidate_email}
+                    </p>
+                  )}
+                  {data.candidate_phone && (
+                    <p className="flex items-center gap-2">
+                      <Phone className="size-4 text-muted-foreground" /> {data.candidate_phone}
+                    </p>
+                  )}
+                  <Button variant="ghost" size="sm" className="-ml-2" onClick={startEdit}>
+                    <Pencil className="size-3.5" /> Edit details
+                  </Button>
+                </div>
+              )}
+
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="flex items-center gap-2 text-sm font-semibold">
+                    <Briefcase className="size-4 text-muted-foreground" /> Jobs
                   </p>
-                )}
-                {data.candidate_phone && (
-                  <p className="flex items-center gap-2">
-                    <Phone className="size-4 text-muted-foreground" /> {data.candidate_phone}
-                  </p>
+                  <Button variant="ghost" size="sm" disabled={data.processing_status !== "ready"} onClick={() => setAddToJobFor(data.id)}>
+                    <Plus className="size-3.5" /> Add to job
+                  </Button>
+                </div>
+                {data.applications?.length ? (
+                  <ul className="space-y-1.5 text-sm">
+                    {data.applications.map((a) => (
+                      <li key={a.application_id} className="flex items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2">
+                        <Link to="/jobs/$jobId" params={{ jobId: String(a.job_id) }} className="truncate font-medium hover:underline">
+                          {a.job_title}
+                        </Link>
+                        <span className="shrink-0 text-xs capitalize text-muted-foreground">
+                          {a.status}
+                          {a.score != null ? ` · ${Math.round(a.score * 100)}%` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Not attached to any job yet.</p>
                 )}
               </div>
 
@@ -214,6 +317,11 @@ export function CandidateDrawer({
           )}
         </div>
       </SheetContent>
+      <AddToJobDialog
+        resumeId={addToJobFor}
+        candidateName={data?.candidate_name}
+        onOpenChange={(open) => !open && setAddToJobFor(null)}
+      />
     </Sheet>
   );
 }

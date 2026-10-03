@@ -9,7 +9,7 @@ import json
 import os
 import sys
 
-from evaluation.metrics import mean, precision_recall_f1
+from evaluation.metrics import mean
 from ai.extraction import extract_email, extract_experience, extract_name
 from ai.skills_extractor import SkillsExtractor
 

@@ -1,23 +1,34 @@
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 import core.audit as audit
 from core.config import MAX_BATCH_FILES
 from core.database import get_db
 from auth.deps import get_current_user, user_limit
-from models import User
+from ai.extraction import normalize_phone
+from models import Application, Job, User
+from services.job_service import JobService
 from services.queue_service import enqueue_resume_processing
 from services.resume_service import ResumeService
 from services.search_service import reindex_user_resumes
 from core.security import UploadRejected, ValidatedUpload, read_pdf_upload
 from services.storage_service import StorageError, get_storage
-from core.utils import fail, safe_json_loads, success_response
+from core.utils import fail, logger, safe_json_loads, success_response, validate_email
 
 router = APIRouter(prefix="/api/resumes", tags=["resumes"])
+
+
+class ResumeUpdate(BaseModel):
+    """Corrections to what parsing got wrong. Only the fields that are sent change."""
+    candidate_name: Optional[str] = Field(default=None, max_length=255)
+    candidate_email: Optional[str] = Field(default=None, max_length=254)
+    candidate_phone: Optional[str] = Field(default=None, max_length=40)
+    experience_years: Optional[float] = Field(default=None, ge=0, le=60)
 
 
 def _ingest(db: Session, user: User, upload: ValidatedUpload, request: Request) -> dict:
@@ -79,7 +90,7 @@ def list_resumes(current_user: User = Depends(get_current_user), db: Session = D
         "candidate_phone": r.candidate_phone, "skills": safe_json_loads(r.skills, []),
         "experience_years": r.experience_years, "created_at": r.created_at.isoformat(),
         "processing_status": r.processing_status, "processing_error": r.processing_error,
-        "needs_review": bool((safe_json_loads(r.extraction_meta, {}) or {}).get("needs_review")),
+        "needs_review": r.needs_review,
     } for r in resumes])
 
 
@@ -89,6 +100,13 @@ def get_resume(resume_id: int, current_user: User = Depends(get_current_user), d
     if not resume:
         return fail(404, "Resume not found")
     meta = safe_json_loads(resume.extraction_meta, {}) or {}
+    applications = (
+        db.query(Application.id, Application.job_id, Application.status, Application.match_score, Job.title)
+        .join(Job, Job.id == Application.job_id)
+        .filter(Application.resume_id == resume.id, Job.user_id == current_user.id)
+        .order_by(Application.applied_at.desc())
+        .all()
+    )
     return success_response(data={
         "id": resume.id, "candidate_name": resume.candidate_name, "candidate_email": resume.candidate_email,
         "candidate_phone": resume.candidate_phone, "skills": safe_json_loads(resume.skills, []),
@@ -97,10 +115,47 @@ def get_resume(resume_id: int, current_user: User = Depends(get_current_user), d
         "created_at": resume.created_at.isoformat(),
         "processing_status": resume.processing_status, "processing_error": resume.processing_error,
         "name_confidence": resume.name_confidence,
-        "needs_review": bool(meta.get("needs_review")),
+        "needs_review": resume.needs_review,
+        "applications": [
+            {"application_id": a.id, "job_id": a.job_id, "job_title": a.title, "status": a.status,
+             "score": round(a.match_score, 3) if a.match_score is not None else None}
+            for a in applications
+        ],
         "used_ocr": bool(meta.get("used_ocr")),
         "unrecognised_skills": meta.get("unrecognised_skills", []),
     })
+
+
+@router.patch("/{resume_id}")
+def update_resume(resume_id: int, payload: ResumeUpdate, request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    resume = ResumeService.get_resume_by_id(db, resume_id, current_user.id)
+    if not resume:
+        return fail(404, "Resume not found")
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        return fail(400, "Nothing to update")
+    email = (changes.get("candidate_email") or "").strip()
+    if email and not validate_email(email):
+        return fail(400, "Please enter a valid email address")
+    phone = (changes.get("candidate_phone") or "").strip()
+    if phone:
+        phone = normalize_phone(phone)
+        if not phone:
+            return fail(400, "Please enter a valid phone number")
+    try:
+        ResumeService.update_details(
+            db, resume, candidate_name=changes.get("candidate_name"), candidate_email=email,
+            candidate_phone=phone, experience_years=changes.get("experience_years"), fields_set=set(changes),
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"resume update failed for {resume_id}: {e}", exc_info=True)
+        return fail(500, "Could not save the changes")
+    audit.record(db, "resume_updated", user_id=current_user.id, resource_type="resume", resource_id=resume.id, request=request, fields=sorted(changes))
+    return success_response(data={
+        "id": resume.id, "candidate_name": resume.candidate_name, "candidate_email": resume.candidate_email,
+        "candidate_phone": resume.candidate_phone, "experience_years": resume.experience_years, "needs_review": resume.needs_review,
+    }, message="Details saved")
 
 
 @router.get("/{resume_id}/file")
@@ -113,7 +168,16 @@ def download_resume_file(resume_id: int, request: Request, current_user: User = 
     try:
         data = get_storage(resume.storage_backend or "local").read_bytes(resume.file_path)
     except StorageError as e:
-        return fail(502, "The stored file could not be retrieved", str(e))
+        # Most common cause in practice: this resume was stored on a backend
+        # (Cloudinary, or a local path from a previous run) that isn't reachable
+        # with the server's current configuration. Say that plainly instead of a
+        # generic failure, since "re-upload it" is the actual fix either way.
+        logger.warning(f"resume {resume.id} file unreadable (backend={resume.storage_backend}): {e}")
+        return fail(
+            502,
+            "The original file for this resume is no longer available and needs to be re-uploaded.",
+            str(e),
+        )
     audit.record(db, "resume_downloaded", user_id=current_user.id, resource_type="resume", resource_id=resume.id, request=request)
     safe_name = (resume.file_name or "resume.pdf").replace('"', "")
     return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{safe_name}"'})
@@ -154,4 +218,6 @@ def reindex_resumes(current_user: User = Depends(get_current_user), db: Session 
     """Rebuilds this tenant's vectors from stored text. Use after changing the
     chunking/embedding strategy, or once when migrating from the old FAISS index."""
     count = reindex_user_resumes(db, current_user.id)
+    JobService.invalidate_user_scores(db, current_user.id)  # vectors changed, so stored scores are stale
+    db.commit()
     return success_response(data={"reindexed": count}, message=f"Search index rebuilt for {count} resumes")

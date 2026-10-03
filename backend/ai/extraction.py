@@ -1,42 +1,118 @@
 import re
 from datetime import datetime
+from functools import lru_cache
 from typing import Dict, List, Optional, Tuple
 
-from core.config import NAME_CONFIDENCE_THRESHOLD, NER_ENABLED, OCR_ENABLED
-from .skills_extractor import SkillsExtractor
+from core.config import MAX_PDF_PAGES, NAME_CONFIDENCE_THRESHOLD, NER_ENABLED, OCR_ENABLED
+from ai.skills_extractor import SkillsExtractor
 
 _MONTHS = {
     "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
     "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
 }
 _MONTH_RE = r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
+# Matches "2022", "'22" or "22" right after a month token — the short forms are
+# only accepted immediately after a month name so a bare "22" elsewhere in the
+# text (an age, a percentage) is never mistaken for a year.
+_YEAR_RE = r"(?:(?:19|20)\d{2}|'\d{2})"
 
 _NAME_STOP_WORDS = {
     "resume", "curriculum", "vitae", "cv", "profile", "summary", "objective", "experience",
     "education", "skills", "contact", "phone", "email", "address", "linkedin", "github",
     "portfolio", "page", "professional", "personal", "details", "information", "references",
-    "available", "upon", "request",
+    "available", "upon", "request", "mobile", "dob", "gender", "nationality", "location",
 }
 _ROLE_WORDS = {
     "engineer", "developer", "manager", "student", "intern", "analyst", "designer",
     "consultant", "scientist", "architect", "specialist", "fresher", "graduate", "lead",
-    "programmer", "administrator",
+    "programmer", "administrator", "founder", "freelancer", "trainee",
 }
+_CONTACT_TOKEN = re.compile(
+    r"@|https?://|www\.|linkedin\.com|github\.com|\+?\d[\d\-\s()]{6,}\d|"
+    r"\b(?:faridabad|delhi|gurugram|gurgaon|noida|mumbai|bangalore|bengaluru|pune|hyderabad|chennai|kolkata|india)\b",
+    re.IGNORECASE,
+)
 
 _EDU_LINE = re.compile(
     r"\b(b\.?\s?tech|m\.?\s?tech|bachelor|master|b\.?sc|m\.?sc|b\.?e\b|mba|bca|mca|university|college|school|"
     r"institute|cgpa|gpa|degree|diploma|percentage|class\s+x|12th|10th|senior secondary|higher secondary)",
     re.IGNORECASE,
 )
-_SECTION_START = re.compile(
-    r"^\s*(work\s+experience|professional\s+experience|employment(?:\s+history)?|experience|work\s+history|internships?)\s*:?\s*$",
+_FRESHER_RE = re.compile(
+    r"\b(?:fresher|no\s+(?:prior\s+)?(?:work\s+)?experience|recent\s+graduate|entry[\s-]level)\b",
     re.IGNORECASE,
 )
-_SECTION_END = re.compile(
-    r"^\s*(education|academic(?:s|\s+background)?|projects?|skills|technical\s+skills|certifications?|achievements?|"
-    r"awards?|publications?|extracurriculars?|interests|languages|references)\s*:?\s*$",
+
+
+# ------------------------------------------------------------------ section segmentation
+#
+# Resumes mix dates and keywords across very different sections (a degree's
+# "2023-2027", a project's tech list, an "eager to learn Go" aside). Instead of
+# guessing line-by-line which of those belong to "experience" or "skills",
+# split the whole resume into labelled sections once and read each field only
+# from the sections where it actually belongs. This is what fixes a student's
+# degree years ("Delhi Technical Campus ... (2023-2027)") from being counted
+# as 3+ years of work experience: it lives in the education section, which
+# experience computation never looks at unless there is no experience section
+# at all (see extract_experience).
+
+_SECTION_HEADERS = {
+    "experience": r"work\s+experience|professional\s+experience|employment(?:\s+history)?|experience|"
+                  r"work\s+history|internships?|career\s+(?:history|summary)|relevant\s+experience",
+    "education": r"education|academic(?:s|\s+background)?|academic\s+qualifications?",
+    "skills": r"skills(?:\s*(?:&|and)\s*(?:tools|interests))?|technical\s+skills|key\s+skills|core\s+skills|"
+              r"core\s+competencies|technologies|tools?(?:\s*(?:&|and)\s*technologies)?|skill\s*set|"
+              r"areas\s+of\s+expertise",
+    "projects": r"projects?|academic\s+projects?|personal\s+projects?|key\s+projects?|open[\s-]source(?:\s+projects?)?",
+    "objective": r"objective|summary|professional\s+summary|profile|profile\s+summary|about\s+me|career\s+objective",
+    "certifications": r"certifications?|certificates?|licenses?",
+    "achievements": r"achievements?|awards?|honou?rs?|accomplishments?",
+    "publications": r"publications?",
+    "other": r"extracurriculars?|interests|hobbies|languages|references|declaration|volunteer(?:ing)?|activities|"
+             r"additional\s+information|other\s+information",
+}
+_SECTION_HEADER_RE = {
+    label: re.compile(rf"^\s*(?:{pattern})\s*:?\s*$", re.IGNORECASE)
+    for label, pattern in _SECTION_HEADERS.items()
+}
+
+
+def _segment_text(text: str) -> Dict[str, str]:
+    """Splits a resume into {section_label: joined_line_text}, keyed by the
+    canonical labels in _SECTION_HEADERS plus "preamble" for everything before
+    the first recognised header (name, contact line, headline)."""
+    buckets: Dict[str, List[str]] = {"preamble": []}
+    current = "preamble"
+    for line in text.split("\n"):
+        matched = None
+        for label, pattern in _SECTION_HEADER_RE.items():
+            if pattern.match(line):
+                matched = label
+                break
+        if matched:
+            current = matched
+            buckets.setdefault(current, [])
+            continue
+        buckets.setdefault(current, []).append(line)
+    return {label: "\n".join(lines) for label, lines in buckets.items()}
+
+
+_ASPIRATIONAL_RE = re.compile(
+    r"\((?:comfortable\s+)?pick(?:ing)?\s+up\s+(?:new\s+)?(?:languages?|skills?|technologies?|frameworks?)"
+    r"\s+such\s+as\s+[^)]*\)"
+    r"|\b(?:eager|willing|happy|hoping|planning|interested)\s+to\s+learn\s+[^.;\n)]*"
+    r"|\bwant(?:s|ing)?\s+to\s+learn\s+[^.;\n)]*"
+    r"|\b(?:looking\s+forward\s+to|plan\s+to)\s+(?:learn(?:ing)?|pick(?:ing)?\s+up)\s+[^.;\n)]*",
     re.IGNORECASE,
 )
+
+
+def _strip_aspirational(text: str) -> str:
+    """Drops clauses that name a technology the candidate does NOT yet have —
+    "comfortable picking up new languages such as Go or Scala", "eager to learn
+    Kubernetes" — so they are not extracted as if they were current skills."""
+    return _ASPIRATIONAL_RE.sub(" ", text)
+
 
 
 # ------------------------------------------------------------------ text
@@ -49,7 +125,7 @@ def extract_text_from_pdf(file_path: str) -> Tuple[Optional[str], bool]:
     text = ""
     try:
         with pdfplumber.open(file_path) as pdf:
-            for page in pdf.pages:
+            for page in pdf.pages[:MAX_PDF_PAGES]:
                 page_text = page.extract_text(x_tolerance=3, y_tolerance=3)
                 if page_text:
                     text += f"\n{page_text}"
@@ -64,6 +140,13 @@ def extract_text_from_pdf(file_path: str) -> Tuple[Optional[str], bool]:
 
     if not text.strip():
         return None, used_ocr
+    # Resumes that use icon fonts for contact-detail bullets (a phone/email/
+    # LinkedIn glyph) sometimes hit a font pdfplumber can't map to a real
+    # character; it falls back to emitting the raw glyph id as literal text
+    # like "(cid:239)". These carry no information and would otherwise sit
+    # right in the middle of the contact line, so drop them before anything
+    # else runs.
+    text = re.sub(r"\(cid:\d+\)", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r"[•●◆▪►]", "-", text)
     return text.strip(), used_ocr
@@ -88,9 +171,23 @@ def _ocr_pdf(file_path: str, max_pages: int = 4) -> Optional[str]:
 
 # ------------------------------------------------------------------ contact details
 
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+")
+_COMMON_TLDS = ("com", "org", "net", "edu", "gov", "io", "co", "in", "ai", "dev", "me", "uk", "us", "info", "biz", "tech", "app")
+# PDF text extraction often glues the next word onto an address when the two sit
+# in different columns: "jane@mail.comLinkedIn". If a known TLD is directly
+# followed by a capital letter, the capital starts the next word.
+_GLUED_TLD = re.compile(r"^(.+?\.(?:" + "|".join(_COMMON_TLDS) + r"))(?=[A-Z])")
+
+
 def extract_email(text: str) -> Optional[str]:
-    match = re.search(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", text)
-    return match.group(0).lower().rstrip(".") if match else None
+    match = _EMAIL_RE.search(text or "")
+    if not match:
+        return None
+    address = match.group(0).rstrip(".-")
+    glued = _GLUED_TLD.match(address)
+    if glued:
+        address = glued.group(1)
+    return address.lower()
 
 
 def normalize_phone(raw: Optional[str]) -> Optional[str]:
@@ -134,6 +231,23 @@ def _email_tokens(email: Optional[str]) -> set:
     return {t for t in re.split(r"[^a-z]+", local.lower()) if len(t) >= 3}
 
 
+def _name_candidates_from_line(line: str) -> List[str]:
+    """A line that mixes the name with contact details ("Sushant Thakur |
+    Faridabad | +91-9310738102 | mail@x.com", "Jane Doe - Backend Engineer")
+    is common, so the name is usually only the first segment. Try the whole
+    line first, then each segment split on a separator, longest first."""
+    candidates = [line]
+    segments = re.split(r"\s*[|•·│]\s*|\s{2,}|\t+|\s+-\s+|\s*,\s*", line)
+    candidates.extend(s for s in segments if s and s != line)
+    seen, out = set(), []
+    for c in candidates:
+        c = c.strip(" .")
+        if c and c not in seen:
+            seen.add(c)
+            out.append(c)
+    return out
+
+
 def _score_name_line(line: str, position: int, email_tokens: set) -> float:
     words = line.split()
     if not 1 < len(words) <= 4:
@@ -155,13 +269,22 @@ def _score_name_line(line: str, position: int, email_tokens: set) -> float:
     return min(score, 0.98)
 
 
+@lru_cache(maxsize=1)
+def _load_ner():
+    """The spaCy model takes ~1s to load, so it is loaded once per process (a
+    failed load is cached as None too, instead of retrying for every resume)."""
+    try:
+        import spacy
+        return spacy.load("en_core_web_sm", disable=["lemmatizer"])
+    except Exception:
+        return None
+
+
 def _ner_person(text: str) -> Optional[str]:
     if not NER_ENABLED:
         return None
-    try:
-        import spacy
-        nlp = spacy.load("en_core_web_sm", disable=["lemmatizer"])
-    except Exception:
+    nlp = _load_ner()
+    if nlp is None:
         return None
     try:
         doc = nlp(text[:600])
@@ -181,11 +304,17 @@ def extract_name(text: str, email: Optional[str] = None) -> Tuple[Optional[str],
 
     best_name, best_score = None, 0.0
     for i, line in enumerate(lines[:8]):
-        if "@" in line or "http" in line.lower() or re.search(r"\d{4,}", line):
+        if _CONTACT_TOKEN.search(line) and "|" not in line and "  " not in line and "\t" not in line:
+            # A line that's *entirely* a contact detail (just an email, a phone,
+            # an address) is never a name. A line where the name shares space
+            # with contact details (has a separator) still gets segmented below.
             continue
-        score = _score_name_line(line, i, tokens)
-        if score > best_score:
-            best_name, best_score = line, score
+        for candidate in _name_candidates_from_line(line):
+            if _CONTACT_TOKEN.search(candidate) or re.search(r"\d{3,}", candidate):
+                continue
+            score = _score_name_line(candidate, i, tokens)
+            if score > best_score:
+                best_name, best_score = candidate, score
 
     method = "heuristic"
     if best_score < NAME_CONFIDENCE_THRESHOLD:
@@ -205,32 +334,33 @@ def extract_name(text: str, email: Optional[str] = None) -> Tuple[Optional[str],
 # ------------------------------------------------------------------ experience
 
 def _experience_section(text: str) -> Optional[str]:
-    lines = text.split("\n")
-    start = None
-    for i, line in enumerate(lines):
-        if _SECTION_START.match(line):
-            start = i + 1
-            break
-    if start is None:
-        return None
-    end = len(lines)
-    for j in range(start, len(lines)):
-        if _SECTION_END.match(lines[j]):
-            end = j
-            break
-    section = "\n".join(lines[start:end])
+    """All experience-type sections joined. Resumes often split work history
+    across "Work Experience" and a later "Internships" block; reading only the
+    first one silently drops the rest."""
+    section = _segment_text(text).get("experience", "")
     return section if section.strip() else None
 
 
+def _norm_year(raw: str) -> int:
+    """'22 -> 2022. Two-digit years only ever show up in recent resumes, so
+    treat every one of them as 2000 + YY rather than guessing 19xx vs 20xx."""
+    raw = raw.lstrip("'")
+    return int(raw) if len(raw) == 4 else 2000 + int(raw)
+
+
 _RANGE = re.compile(
-    rf"(?:{_MONTH_RE}[\s,]*)?((?:19|20)\d{{2}})\s*(?:-|–|—|to)\s*"
-    rf"(?:(?:{_MONTH_RE}[\s,]*)?((?:19|20)\d{{2}})|(present|current|now|ongoing|till\s+date|to\s+date))",
+    rf"(?:{_MONTH_RE}[\s,]*)?({_YEAR_RE})\s*(?:-|–|—|to)\s*"
+    rf"(?:(?:{_MONTH_RE}[\s,]*)?({_YEAR_RE})|(present|current|now|ongoing|till\s+date|to\s+date))",
     re.IGNORECASE,
 )
 _NUMERIC_RANGE = re.compile(
-    r"(\d{1,2})[/.]((?:19|20)\d{2})\s*(?:-|–|—|to)\s*(?:(\d{1,2})[/.]((?:19|20)\d{2})|(present|current|now|ongoing))",
+    r"(\d{1,2})[/.](\d{2}|\d{4})\s*(?:-|–|—|to)\s*(?:(\d{1,2})[/.](\d{2}|\d{4})|(present|current|now|ongoing))",
     re.IGNORECASE,
 )
+# A role line with only a single year and no range at all — "AI Engineer Intern |
+# Acme   2026" — is common for short internships and still carries real signal.
+# Only ever consulted for a year that isn't already part of a matched range.
+_LONE_YEAR = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)")
 
 
 def _month_index(year: int, month: int) -> int:
@@ -252,31 +382,47 @@ def _date_intervals(text: str, now: Optional[datetime] = None) -> List[Tuple[int
             return
         intervals.append((start_idx, end_idx))
 
+    consumed: List[Tuple[int, int]] = []  # character spans already explained by a real range
+
     for m in _RANGE.finditer(text):
+        consumed.append(m.span())
         start_month_name, start_year, end_month_name, end_year, present = m.group(1), m.group(2), m.group(3), m.group(4), m.group(5)
         start_month = _MONTHS[start_month_name[:3].lower()] if start_month_name else 1
-        start_idx = _month_index(int(start_year), start_month)
+        start_idx = _month_index(_norm_year(start_year), start_month)
         if present:
             end_idx = now_idx
             year_only = start_month_name is None
         else:
             end_month = _MONTHS[end_month_name[:3].lower()] if end_month_name else 1
-            end_idx = _month_index(int(end_year), end_month)
+            end_idx = _month_index(_norm_year(end_year), end_month)
             year_only = start_month_name is None or end_month_name is None
         add(start_idx, end_idx, year_only)
 
     for m in _NUMERIC_RANGE.finditer(text):
+        consumed.append(m.span())
         sm, sy, em, ey, present = m.groups()
         if not 1 <= int(sm) <= 12:
             continue
-        start_idx = _month_index(int(sy), int(sm))
+        start_idx = _month_index(_norm_year(sy), int(sm))
         if present:
             end_idx = now_idx
         else:
             if not 1 <= int(em) <= 12:
                 continue
-            end_idx = _month_index(int(ey), int(em))
+            end_idx = _month_index(_norm_year(ey), int(em))
         add(start_idx, end_idx, False)
+
+    for m in _LONE_YEAR.finditer(text):
+        if any(s <= m.start() and m.end() <= e for s, e in consumed):
+            continue
+        year = int(m.group(1))
+        if year > now.year:
+            continue
+        # Treated as a ~6-month engagement, via the same year-only floor `add`
+        # already applies above — conservative rather than assuming a full year.
+        start_idx = _month_index(year, 1)
+        add(start_idx, start_idx, True)
+
     return intervals
 
 
@@ -298,11 +444,12 @@ def merged_months(intervals: List[Tuple[int, int]]) -> int:
 
 
 _STATED_PATTERNS = [
+    r"(\d+(?:\.\d+)?)\s*\+?\s*years?\s*(?:and)?\s*,?\s*(\d+)\s*\+?\s*months?\s+(?:of\s+)?(?:total\s+)?(?:work\s+)?experience",
     r"(\d+(?:\.\d+)?)\s*\+?\s*years?\s+(?:of\s+)?(?:professional\s+)?(?:work\s+)?experience",
     r"(\d+(?:\.\d+)?)\s*\+?\s*yrs?\s+(?:of\s+)?(?:professional\s+)?experience",
     r"total\s+(?:work\s+)?experience\s*:?\s*(\d+(?:\.\d+)?)\s*\+?\s*years?",
     r"experience\s*:?\s*(\d+(?:\.\d+)?)\s*\+?\s*years?",
-    r"(\d+(?:\.\d+)?)\s*\+?\s*years?\s+(?:in\s+)?(?:software|development|engineering|it|programming)",
+    r"(\d+(?:\.\d+)?)\s*\+?\s*years?\s+(?:in\s+)?(?:software|development|engineering|it|programming)\b",
     r"over\s+(\d+)\s+years?",
     r"more\s+than\s+(\d+)\s+years?",
 ]
@@ -313,12 +460,21 @@ def extract_experience(text: str, now: Optional[datetime] = None) -> Tuple[Optio
     """Returns (years, source) where source is 'stated', 'computed' or 'none'.
     A number the candidate states outright wins; otherwise years are computed
     from the date ranges in the experience section (overlaps merged, education
-    dates excluded)."""
+    dates excluded). A resume that identifies itself as a fresher and states no
+    other experience is treated as 0 years rather than "unknown"."""
     if not text:
         return None, "none"
     lower = text.lower()
 
-    for pattern in _STATED_PATTERNS:
+    # "3 years 6 months" / "3 years, 6 months" of experience, checked first since
+    # it is more specific than the plain "N years" patterns below.
+    combo = re.search(_STATED_PATTERNS[0], lower)
+    if combo:
+        years, months = float(combo.group(1)), float(combo.group(2))
+        if 0 <= years <= 50 and 0 <= months < 12:
+            return round(years + months / 12, 1), "stated"
+
+    for pattern in _STATED_PATTERNS[1:]:
         match = re.search(pattern, lower)
         if match:
             try:
@@ -331,14 +487,23 @@ def extract_experience(text: str, now: Optional[datetime] = None) -> Tuple[Optio
         if re.search(rf"{word}\s+years?\s+(?:of\s+)?experience", lower):
             return float(num), "stated"
 
+    # Date-range computation only ever looks at text that is actually about work:
+    # the Experience section if the resume has one, or — if it doesn't — only the
+    # preamble above the first recognised header, never Education/Projects/Skills/
+    # Certifications/etc. This is what keeps a degree's "(2023-2027)" or a
+    # certification's issue date from being counted as years of work experience.
     section = _experience_section(text)
     if section is not None:
         scope = section
     else:
-        scope = "\n".join(l for l in text.split("\n") if not _EDU_LINE.search(l))
+        preamble = _segment_text(text).get("preamble", "")
+        scope = "\n".join(l for l in preamble.split("\n") if not _EDU_LINE.search(l))
     months = merged_months(_date_intervals(scope, now))
     if months > 0:
         return round(months / 12, 1), "computed"
+
+    if _FRESHER_RE.search(lower):
+        return 0.0, "stated"
     return None, "none"
 
 
@@ -365,9 +530,15 @@ _DEGREE_PATTERNS = [
 def extract_education(text: str) -> List[Dict]:
     if not text:
         return []
+    # A degree is only claimed in the education section ("Master Data Management"
+    # in a job description, "BE" in prose, must not become a qualification).
+    # Resumes with no recognisable heading fall back to the whole text.
+    scope = _segment_text(text).get("education", "")
+    if not scope.strip():
+        scope = text
     found = []
     for pattern, label, flags in _DEGREE_PATTERNS:
-        if re.search(pattern, text, flags):
+        if re.search(pattern, scope, flags):
             found.append({"degree": label})
     return found
 
@@ -378,8 +549,15 @@ def parse_resume(text: str, used_ocr: bool = False) -> Dict:
     email = extract_email(text)
     name, name_conf, name_method = extract_name(text, email)
     years, years_source = extract_experience(text)
+
+    # Skills are read from everything except the Education section (a degree
+    # title like "AI & Machine Learning" is not a claimed skill), with clauses
+    # that name a technology the candidate doesn't have yet ("eager to learn
+    # Go") stripped first so only technologies actually in use are counted.
+    segments = _segment_text(text)
+    skills_text = _strip_aspirational("\n".join(v for k, v in segments.items() if k != "education"))
     extractor = SkillsExtractor()
-    skills = extractor.extract(text)
+    skills = extractor.extract(skills_text)
     meta = {
         "name_method": name_method,
         "email_confidence": 0.99 if email else 0.0,

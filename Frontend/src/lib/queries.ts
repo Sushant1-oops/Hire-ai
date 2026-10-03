@@ -1,7 +1,7 @@
 import { apiRequest } from "./api";
 import type {
   ApplicationStatus,
-  DashboardStats,
+  DashboardData,
   GeneratedJobDescription,
   InterviewQuestions,
   Job,
@@ -17,7 +17,7 @@ import type {
 
 export const dashboardStatsQuery = () => ({
   queryKey: ["dashboard", "stats"],
-  queryFn: () => apiRequest<DashboardStats>("/api/dashboard/stats"),
+  queryFn: () => apiRequest<DashboardData>("/api/dashboard/stats"),
 });
 
 export const resumesQuery = () => ({
@@ -37,6 +37,10 @@ export interface SearchPayload {
   nice_to_have_skills: string[];
   min_experience: number;
   job_description?: string | undefined;
+  /** Strict mode: drop candidates that don't have every required skill. */
+  must_have_skills?: string[] | undefined;
+  /** Strict mode: drop candidates below the minimum experience instead of just scoring them lower. */
+  hard_min_experience?: number | undefined;
   top_k?: number;
 }
 
@@ -79,14 +83,31 @@ export const openResumeFile = async (id: string | number): Promise<void> => {
 export const deleteResume = (id: string | number) =>
   apiRequest<void>(`/api/resumes/${id}`, { method: "DELETE" });
 
+export const reprocessResume = (id: string | number) =>
+  apiRequest<void>(`/api/resumes/${id}/reprocess`, { method: "POST" });
+
+export const updateResume = (
+  id: string | number,
+  changes: {
+    candidate_name?: string | null;
+    candidate_email?: string | null;
+    candidate_phone?: string | null;
+    experience_years?: number | null;
+  },
+) => apiRequest<void>(`/api/resumes/${id}`, { method: "PATCH", body: changes });
+
 export const reindexResumes = () => apiRequest<void>("/api/resumes/reindex", { method: "POST" });
 
-export const analyzeMatch = (payload: { resume_id: string | number; job_description: string }) =>
-  apiRequest<MatchAnalysis>("/api/ai/analyze-match", { body: payload });
+export const analyzeMatch = (payload: {
+  resume_id: string | number;
+  job_id?: number | undefined;
+  job_description?: string | undefined;
+}) => apiRequest<MatchAnalysis>("/api/ai/analyze-match", { body: payload });
 
 export const generateQuestions = (payload: {
   resume_id: string | number;
-  job_title: string;
+  job_id?: number | undefined;
+  job_title?: string | undefined;
   job_description?: string | undefined;
   required_skills?: string[] | undefined;
 }) => apiRequest<InterviewQuestions>("/api/ai/generate-questions", { body: payload });
@@ -94,7 +115,8 @@ export const generateQuestions = (payload: {
 export const generateEmail = (payload: {
   resume_id: string | number;
   email_type: string;
-  job_title: string;
+  job_id?: number | undefined;
+  job_title?: string | undefined;
   company_name?: string | undefined;
   contact_person?: string | undefined;
   interview_date?: string | undefined;
@@ -102,8 +124,12 @@ export const generateEmail = (payload: {
   interview_location?: string | undefined;
 }) => apiRequest<OutreachEmail>("/api/ai/generate-email", { body: payload });
 
-export const sendEmail = (payload: { to_email: string; subject: string; body: string }) =>
-  apiRequest<void>("/api/email/send", { body: payload });
+export const sendEmail = (payload: {
+  to_email: string;
+  subject: string;
+  body: string;
+  outreach_id?: number | undefined;
+}) => apiRequest<void>("/api/email/send", { body: payload });
 
 export const generateJobDescription = (payload: {
   job_title: string;
@@ -112,7 +138,8 @@ export const generateJobDescription = (payload: {
   required_skills?: string[] | undefined;
 }) => apiRequest<GeneratedJobDescription>("/api/ai/generate-job-description", { body: payload });
 
-
+export const extractSkills = (text: string) =>
+  apiRequest<{ skills: string[] }>("/api/jobs/extract-skills", { body: { text } });
 
 export const jobsQuery = () => ({
   queryKey: ["jobs"],
@@ -132,16 +159,27 @@ export const jobApplicationsQuery = (jobId: string | number) => ({
   enabled: !!jobId,
 });
 
-export const createJob = (payload: {
+export interface JobInput {
   title: string;
   description: string;
-  location?: string | undefined;
-  experience_min?: number | undefined;
+  location?: string | null | undefined;
+  experience_min?: number | null | undefined;
   required_skills?: string[] | undefined;
-}) => apiRequest<Job>("/api/jobs", { body: payload });
+}
+
+export const createJob = (payload: JobInput) => apiRequest<Job>("/api/jobs", { body: payload });
+
+export const updateJob = (jobId: string | number, payload: Partial<JobInput>) =>
+  apiRequest<Job>(`/api/jobs/${jobId}`, { method: "PATCH", body: payload });
+
+export const deleteJob = (jobId: string | number) =>
+  apiRequest<void>(`/api/jobs/${jobId}`, { method: "DELETE" });
 
 export const setJobStatus = (jobId: string | number, status: "open" | "closed") =>
   apiRequest<Job>(`/api/jobs/${jobId}/status`, { method: "PATCH", body: { status } });
+
+export const addCandidateToJob = (jobId: string | number, resumeId: string | number) =>
+  apiRequest<void>(`/api/jobs/${jobId}/applications`, { body: { resume_id: Number(resumeId) } });
 
 export const setApplicationStatus = (applicationId: string | number, status: ApplicationStatus) =>
   apiRequest<void>(`/api/applications/${applicationId}/status`, {
@@ -149,7 +187,8 @@ export const setApplicationStatus = (applicationId: string | number, status: App
     body: { status },
   });
 
-
+export const removeApplication = (applicationId: string | number) =>
+  apiRequest<void>(`/api/applications/${applicationId}`, { method: "DELETE" });
 
 export const publicJobQuery = (slug: string) => ({
   queryKey: ["public-job", slug],

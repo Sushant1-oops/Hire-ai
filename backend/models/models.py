@@ -11,9 +11,17 @@ from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, 
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.types import TypeDecorator
 
-from core.config import EMBEDDING_DIM
+from core.config import EMBEDDING_DIM, NAME_CONFIDENCE_THRESHOLD
 
 Base = declarative_base()
+
+
+def resume_status(is_processed: bool, processing_error: str | None) -> str:
+    """pending | ready | failed. Shared by the Resume model and by queries that
+    select only these two columns (so they need not load the resume text)."""
+    if processing_error:
+        return "failed"
+    return "ready" if is_processed else "pending"
 
 
 class EmbeddingType(TypeDecorator):
@@ -60,7 +68,6 @@ class User(Base):
     interview_questions = relationship("InterviewQuestions", back_populates="user", cascade="all, delete-orphan", lazy="select")
     outreach_emails = relationship("OutreachEmail", back_populates="user", cascade="all, delete-orphan", lazy="select")
     job_descriptions = relationship("JobDescription", back_populates="user", cascade="all, delete-orphan", lazy="select")
-    analytics = relationship("AnalyticsDashboard", back_populates="user", cascade="all, delete-orphan", uselist=False, lazy="select")
     jobs = relationship("Job", back_populates="user", cascade="all, delete-orphan", lazy="select")
 
     def __repr__(self):
@@ -108,7 +115,6 @@ class Resume(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="resumes", lazy="select")
-    search_results = relationship("SearchResult", back_populates="resume", cascade="all, delete-orphan", lazy="select")
     candidate_matches = relationship("AICandidateMatch", back_populates="resume", cascade="all, delete-orphan", lazy="select")
     interview_questions = relationship("InterviewQuestions", back_populates="resume", cascade="all, delete-orphan", lazy="select")
     outreach_emails = relationship("OutreachEmail", back_populates="resume", cascade="all, delete-orphan", lazy="select")
@@ -120,13 +126,16 @@ class Resume(Base):
 
     @property
     def processing_status(self):
-        if self.processing_error:
-            return "failed"
-        return "ready" if self.is_processed else "pending"
+        return resume_status(self.is_processed, self.processing_error)
 
     @property
-    def is_complete(self):
-        return all([self.candidate_name, self.candidate_email, self.extracted_text])
+    def needs_review(self):
+        """A processed resume whose name or email we could not read with confidence.
+        The dashboard counts the same condition in SQL (see dashboard_service)."""
+        if not self.is_processed:
+            return False
+        low_name = self.name_confidence is not None and self.name_confidence < NAME_CONFIDENCE_THRESHOLD
+        return self.candidate_email is None or low_name
 
     def to_dict(self):
         return {
@@ -180,7 +189,6 @@ class SearchHistory(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
     user = relationship("User", back_populates="searches", lazy="select")
-    results = relationship("SearchResult", backref="search_history", cascade="all, delete-orphan", lazy="select")
 
     def __repr__(self):
         return f"<SearchHistory(id={self.id}, job_title={self.job_title}, results={self.results_count})>"
@@ -194,40 +202,6 @@ class SearchHistory(Base):
             "min_experience": self.min_experience,
             "results_count": self.results_count,
             "created_at": self.created_at.isoformat() if self.created_at else None,
-        }
-
-
-class SearchResult(Base):
-    __tablename__ = "search_results"
-    __table_args__ = (
-        Index('idx_resume_id', 'resume_id'),
-        Index('idx_final_score', 'final_score'),
-    )
-
-    id = Column(Integer, primary_key=True, index=True)
-    search_history_id = Column(Integer, ForeignKey("search_history.id", ondelete="CASCADE"), index=True, nullable=False)
-    resume_id = Column(Integer, ForeignKey("resumes.id", ondelete="CASCADE"), index=True, nullable=False)
-    semantic_similarity = Column(Float, default=0.0)
-    experience_match = Column(Float, default=0.0)
-    skill_overlap = Column(Float, default=0.0)
-    final_score = Column(Float, default=0.0, index=True)
-    rank = Column(Integer)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    resume = relationship("Resume", back_populates="search_results", lazy="select")
-
-    def __repr__(self):
-        return f"<SearchResult(id={self.id}, resume_id={self.resume_id}, score={self.final_score:.2f})>"
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "resume_id": self.resume_id,
-            "semantic_similarity": round(self.semantic_similarity, 3),
-            "experience_match": round(self.experience_match, 3),
-            "skill_overlap": round(self.skill_overlap, 3),
-            "final_score": round(self.final_score, 3),
-            "rank": self.rank,
         }
 
 
@@ -431,7 +405,13 @@ class Application(Base):
     status = Column(String(20), default="received", index=True)
     # received | screened | shortlisted | rejected | interview | hired
     source = Column(String(20), default="form")  # form | email | manual
-    match_score = Column(Float)
+    match_score = Column(Float, index=True)
+    # JSON of the full score breakdown (see JobService.score_payload). Computed once
+    # when the resume finishes processing or the job changes, so opening a job's
+    # applicant list is a plain read instead of re-embedding and re-ranking.
+    # NULL means "needs (re)scoring".
+    score_details = Column(Text)
+    scored_at = Column(DateTime)
     applied_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -450,39 +430,6 @@ class Application(Base):
             "source": self.source,
             "match_score": round(self.match_score, 3) if self.match_score is not None else None,
             "applied_at": self.applied_at.isoformat() if self.applied_at else None,
-        }
-
-
-class AnalyticsDashboard(Base):
-    __tablename__ = "analytics_dashboard"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True, nullable=False)
-    total_resumes = Column(Integer, default=0)
-    total_searches = Column(Integer, default=0)
-    avg_match_score = Column(Float, default=0.0)
-    top_skills = Column(Text)
-    experience_distribution = Column(Text)
-    total_candidates_hired = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
-
-    user = relationship("User", back_populates="analytics", lazy="select")
-
-    def __repr__(self):
-        return f"<AnalyticsDashboard(user_id={self.user_id}, resumes={self.total_resumes})>"
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "user_id": self.user_id,
-            "total_resumes": self.total_resumes,
-            "total_searches": self.total_searches,
-            "avg_match_score": round(self.avg_match_score, 2),
-            "top_skills": self.top_skills,
-            "experience_distribution": self.experience_distribution,
-            "total_candidates_hired": self.total_candidates_hired,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
 

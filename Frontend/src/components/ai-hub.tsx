@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { RecommendationBadge } from "@/components/recommendation-badge";
+import { MetricBar } from "@/components/score-ring";
 import {
   Accordion,
   AccordionContent,
@@ -34,8 +36,8 @@ import { useAuth } from "@/lib/auth";
 import {
   analyzeMatch,
   generateEmail,
-  generateJobDescription,
   generateQuestions,
+  jobsQuery,
   sendEmail,
 } from "@/lib/queries";
 
@@ -45,7 +47,9 @@ export interface AiHubTarget {
   email?: string | null | undefined;
   /** Free-text search query or job description already known about this candidate, used to prefill the JD field. */
   query?: string | undefined;
-  tab?: "analysis" | "questions" | "email" | "jd" | undefined;
+  /** Preselects a saved job; its description, skills and experience requirement are then used. */
+  jobId?: number | undefined;
+  tab?: "analysis" | "questions" | "email" | undefined;
 }
 
 export function AiHub({
@@ -68,8 +72,17 @@ function AiHubBody({ target }: { target: AiHubTarget }) {
   const { user } = useAuth();
   // The backend requires a job title and/or job description for match analysis,
   // question generation and outreach emails — these are shared across all three tabs.
-  const [jobTitle, setJobTitle] = useState("");
+  const { data: jobs } = useQuery(jobsQuery());
+  // "custom" = free-text title and description instead of a saved job.
+  const [jobChoice, setJobChoice] = useState<string>(target.jobId ? String(target.jobId) : "custom");
+  const savedJob = jobChoice === "custom" ? undefined : jobs?.find((j) => String(j.id) === jobChoice);
+  const jobId = jobChoice === "custom" ? undefined : Number(jobChoice);
+  const [customTitle, setCustomTitle] = useState("");
   const [jobDescription, setJobDescription] = useState(target.query ?? "");
+  // A saved job already carries everything the server needs; the custom path needs these two.
+  const jobReady = jobId !== undefined || (jobDescription.trim().length >= 10);
+  const titleReady = jobId !== undefined || customTitle.trim().length >= 2;
+  const [outreachId, setOutreachId] = useState<number | undefined>(undefined);
   const [emailType, setEmailType] = useState("interview_invite");
   // Pre-filled from the logged-in HR user so the generated email never has to
   // fall back to a generic "Hiring Team"/"[Company Name]" placeholder — still
@@ -81,18 +94,22 @@ function AiHubBody({ target }: { target: AiHubTarget }) {
   const [interviewLocation, setInterviewLocation] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [jdSummary, setJdSummary] = useState("");
-
   const analysis = useMutation({
-    mutationFn: () => analyzeMatch({ resume_id: target.resumeId, job_description: jobDescription }),
+    mutationFn: () =>
+      analyzeMatch({
+        resume_id: target.resumeId,
+        job_id: jobId,
+        job_description: jobId === undefined ? jobDescription : undefined,
+      }),
     onError: (e: Error) => toast.error(e.message),
   });
   const questions = useMutation({
     mutationFn: () =>
       generateQuestions({
         resume_id: target.resumeId,
-        job_title: jobTitle,
-        job_description: jobDescription || undefined,
+        job_id: jobId,
+        job_title: jobId === undefined ? customTitle : undefined,
+        job_description: jobId === undefined ? jobDescription || undefined : undefined,
       }),
     onError: (e: Error) => toast.error(e.message),
   });
@@ -101,7 +118,8 @@ function AiHubBody({ target }: { target: AiHubTarget }) {
       generateEmail({
         resume_id: target.resumeId,
         email_type: emailType,
-        job_title: jobTitle,
+        job_id: jobId,
+        job_title: jobId === undefined ? customTitle : undefined,
         company_name: companyName || undefined,
         contact_person: contactPerson || undefined,
         interview_date: emailType === "interview_invite" ? interviewDate || undefined : undefined,
@@ -112,64 +130,86 @@ function AiHubBody({ target }: { target: AiHubTarget }) {
     onSuccess: (data) => {
       setSubject(data.subject_line ?? "");
       setBody(data.email_body ?? "");
+      setOutreachId(data.id);
       toast.success("Draft ready below — review it, then send");
     },
     onError: (e: Error) => toast.error(e.message),
   });
   const send = useMutation({
-    mutationFn: () => sendEmail({ to_email: target.email ?? "", subject, body }),
+    mutationFn: () => sendEmail({ to_email: target.email ?? "", subject, body, outreach_id: outreachId }),
     onSuccess: () => toast.success(`Email sent to ${target.email}`),
     onError: (e: Error) => toast.error(e.message),
   });
-  const jd = useMutation({
-    mutationFn: () =>
-      generateJobDescription({ job_title: jobTitle || jdSummary, job_shorthand: jdSummary }),
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   return (
     <>
       <SheetHeader>
         <SheetTitle className="flex items-center gap-2">
           <Sparkles className="size-4 text-primary" /> AI Recruitment Hub
         </SheetTitle>
-        <SheetDescription>{target.name ?? "Candidate"} — AI assisted hiring tools</SheetDescription>
+        <SheetDescription>
+          {target.name ?? "Candidate"} — analysis, interview questions, and outreach for this candidate
+        </SheetDescription>
       </SheetHeader>
 
-      <div className="grid gap-4 px-4 pt-2 sm:grid-cols-2">
+      <div className="space-y-3 px-4 pt-2">
         <div className="space-y-2">
-          <Label htmlFor="ai-hub-job-title">Job title</Label>
-          <Input
-            id="ai-hub-job-title"
-            value={jobTitle}
-            onChange={(e) => setJobTitle(e.target.value)}
-            placeholder="Senior Backend Engineer"
-          />
+          <Label>Job</Label>
+          <Select value={jobChoice} onValueChange={setJobChoice}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(jobs ?? []).map((j) => (
+                <SelectItem key={j.id} value={String(j.id)}>
+                  {j.title}
+                </SelectItem>
+              ))}
+              <SelectItem value="custom">Other — describe the role…</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-      </div>
-      <div className="space-y-2 px-4 pt-4">
-        <Label htmlFor="ai-hub-job-description">Job description</Label>
-        <Textarea
-          id="ai-hub-job-description"
-          value={jobDescription}
-          onChange={(e) => setJobDescription(e.target.value)}
-          placeholder="Paste the role's job description — used for match analysis and interview questions"
-          className="min-h-20"
-        />
+
+        {savedJob ? (
+          <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
+            Using this job’s description, required skills ({(savedJob.required_skills ?? []).join(", ") || "none set"})
+            {savedJob.experience_min ? ` and ${savedJob.experience_min}+ years` : ""}. The score matches the job’s applicant list.
+          </p>
+        ) : (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="ai-hub-job-title">Job title</Label>
+              <Input
+                id="ai-hub-job-title"
+                value={customTitle}
+                onChange={(e) => setCustomTitle(e.target.value)}
+                placeholder="Senior Backend Engineer"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ai-hub-job-description">Job description</Label>
+              <Textarea
+                id="ai-hub-job-description"
+                value={jobDescription}
+                onChange={(e) => setJobDescription(e.target.value)}
+                placeholder="Paste the role's job description — used for match analysis and interview questions"
+                className="min-h-20"
+              />
+            </div>
+          </>
+        )}
       </div>
 
       <Tabs defaultValue={target.tab ?? "analysis"} className="px-4 pb-8 pt-4">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="analysis">Match</TabsTrigger>
           <TabsTrigger value="questions">Questions</TabsTrigger>
           <TabsTrigger value="email">Email</TabsTrigger>
-          <TabsTrigger value="jd">JD</TabsTrigger>
         </TabsList>
 
         <TabsContent value="analysis" className="space-y-4 pt-4">
           <Button
             onClick={() => analysis.mutate()}
-            disabled={analysis.isPending || !jobDescription.trim()}
+            disabled={analysis.isPending || !jobReady}
           >
             {analysis.isPending ? (
               <Loader2 className="size-4 animate-spin" />
@@ -178,10 +218,8 @@ function AiHubBody({ target }: { target: AiHubTarget }) {
             )}
             Analyze match
           </Button>
-          {!jobDescription.trim() && (
-            <p className="text-xs text-muted-foreground">
-              Add a job description above to run this.
-            </p>
+          {!jobReady && (
+            <p className="text-xs text-muted-foreground">Choose a job or add a job description to run this.</p>
           )}
           {analysis.isPending && <ListSkeleton />}
           {analysis.data && (
@@ -191,11 +229,18 @@ function AiHubBody({ target }: { target: AiHubTarget }) {
               className="space-y-4"
             >
               <div className="flex items-center gap-2">
-                <Badge>{analysis.data.recommendation}</Badge>
+                <RecommendationBadge value={analysis.data.recommendation} />
                 <span className="text-sm text-muted-foreground">
                   {Math.round(analysis.data.match_score * 100)}% match
                 </span>
               </div>
+              {analysis.data.score_breakdown && (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <MetricBar label="Semantic" value={analysis.data.score_breakdown.semantic_similarity} />
+                  <MetricBar label="Skills" value={analysis.data.score_breakdown.skill_overlap} />
+                  <MetricBar label="Experience" value={analysis.data.score_breakdown.experience_match} />
+                </div>
+              )}
               {analysis.data.explanation && (
                 <p className="rounded-xl bg-muted p-4 text-sm leading-relaxed">
                   {analysis.data.explanation}
@@ -215,6 +260,7 @@ function AiHubBody({ target }: { target: AiHubTarget }) {
               )}
               <BulletCard title="Strengths" tone="success" items={analysis.data.strengths} />
               <BulletCard title="Weaknesses" tone="destructive" items={analysis.data.weaknesses} />
+              <SkillList title="Matched skills" skills={analysis.data.matched_skills} />
               <SkillList
                 title="Missing skills"
                 skills={analysis.data.missing_skills}
@@ -227,7 +273,7 @@ function AiHubBody({ target }: { target: AiHubTarget }) {
         <TabsContent value="questions" className="space-y-4 pt-4">
           <Button
             onClick={() => questions.mutate()}
-            disabled={questions.isPending || !jobTitle.trim()}
+            disabled={questions.isPending || !titleReady}
           >
             {questions.isPending ? (
               <Loader2 className="size-4 animate-spin" />
@@ -236,8 +282,8 @@ function AiHubBody({ target }: { target: AiHubTarget }) {
             )}
             Generate questions
           </Button>
-          {!jobTitle.trim() && (
-            <p className="text-xs text-muted-foreground">Add a job title above to run this.</p>
+          {!titleReady && (
+            <p className="text-xs text-muted-foreground">Choose a job or add a job title to run this.</p>
           )}
           {questions.isPending && <ListSkeleton />}
           {questions.data && (
@@ -336,7 +382,7 @@ function AiHubBody({ target }: { target: AiHubTarget }) {
               </div>
             </div>
           )}
-          <Button onClick={() => email.mutate()} disabled={email.isPending || !jobTitle.trim()}>
+          <Button onClick={() => email.mutate()} disabled={email.isPending || !titleReady}>
             {email.isPending ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
@@ -344,15 +390,12 @@ function AiHubBody({ target }: { target: AiHubTarget }) {
             )}
             Generate email
           </Button>
-          {!jobTitle.trim() && (
-            <p className="text-xs text-muted-foreground">Add a job title above to run this.</p>
+          {!titleReady && (
+            <p className="text-xs text-muted-foreground">Choose a job or add a job title to run this.</p>
           )}
           {email.isSuccess && !subject.trim() && !body.trim() && (
             <p className="text-sm text-destructive">
-              The draft came back empty. This usually means the AI provider didn't return a
-              well-formed response — try Generate again, or check the LLM provider config on the
-              backend (a hosted provider like Groq is far more reliable at this than a small local
-              Ollama model).
+              The draft came back empty — try Generate again.
             </p>
           )}
           {(subject || body) && (
@@ -390,47 +433,6 @@ function AiHubBody({ target }: { target: AiHubTarget }) {
           )}
         </TabsContent>
 
-        <TabsContent value="jd" className="space-y-4 pt-4">
-          <div className="space-y-2">
-            <Label>Role summary</Label>
-            <Textarea
-              value={jdSummary}
-              onChange={(e) => setJdSummary(e.target.value)}
-              placeholder="Senior backend engineer for a fintech platform, Python + Django, 5+ years"
-              className="min-h-28"
-            />
-          </div>
-          <Button
-            onClick={() => jd.mutate()}
-            disabled={jd.isPending || !jdSummary.trim() || !jobTitle.trim()}
-          >
-            {jd.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Sparkles className="size-4" />
-            )}
-            Generate job description
-          </Button>
-          {(!jobTitle.trim() || !jdSummary.trim()) && (
-            <p className="text-xs text-muted-foreground">
-              Add a job title above and a role summary to run this.
-            </p>
-          )}
-          {jd.isPending && <ListSkeleton />}
-          {jd.data && (
-            <div className="space-y-4">
-              <article className="whitespace-pre-wrap rounded-xl border border-border bg-card p-4 text-sm leading-relaxed shadow-soft">
-                {jd.data.job_description}
-              </article>
-              <SkillList title="Required skills" skills={jd.data.required_skills} />
-              <SkillList
-                title="Nice to have"
-                skills={jd.data.nice_to_have_skills}
-                variant="secondary"
-              />
-            </div>
-          )}
-        </TabsContent>
       </Tabs>
     </>
   );
